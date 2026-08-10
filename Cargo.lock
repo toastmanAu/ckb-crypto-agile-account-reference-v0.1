@@ -393,9 +393,9 @@ dependencies = [
 
 [[package]]
 name = "ckb-hash"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6038dc800eb3c8011df213e105a48c51f67e9904767af9356f0d3308b7afd618"
+checksum = "108c6bdc893999c92719b13b2b16f9516f62ce76b0b88055be73d3282c23399d"
 dependencies = [
  "blake2b-ref",
  "blake2b-rs",
