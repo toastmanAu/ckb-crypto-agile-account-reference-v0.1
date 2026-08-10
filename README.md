@@ -300,7 +300,7 @@ Detailed steps and the Type ID creation formula are in
 Assemble a deterministic, non-publishing release candidate locally:
 
 ```sh
-scripts/package_release.sh v0.1.0-rc.1 /tmp/ckb-account-release
+scripts/package_release.sh v0.1.0-rc.2 /tmp/ckb-account-release
 ```
 
 The output contains optimized contract ELFs, CKB data hashes, per-file SHA-256

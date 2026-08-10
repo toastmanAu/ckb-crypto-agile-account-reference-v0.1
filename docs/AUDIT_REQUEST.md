@@ -11,7 +11,7 @@ silently reduced during proposal negotiation.
 **Repository:**
 https://github.com/toastmanAu/ckb-crypto-agile-account-reference-v0.1
 
-**Audit target:** immutable tag `audit-v0.1.0-rc.1` and its associated source
+**Audit target:** immutable tag `audit-v0.1.0-rc.2` and its associated source
 commit. Confirm the resolved commit in the proposal before work begins.
 
 **Stage:** feature-complete, pre-testnet, unaudited reference implementation

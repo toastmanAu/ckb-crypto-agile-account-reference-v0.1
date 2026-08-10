@@ -74,6 +74,7 @@ cargo run --locked -p ckb-account-host --example export_artifact_manifest -- \
 )
 
 tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+  --mode='u+rwX,go+rX,go-w' \
   -czf "$archive" -C "$output_directory" "$release_name"
 (
   cd "$output_directory"
