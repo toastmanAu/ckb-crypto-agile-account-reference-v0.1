@@ -192,6 +192,84 @@ mod vm {
         assert!(fixture.context.verify_tx(&fixture.tx, MAX_CYCLES).is_err());
     }
 
+    #[test]
+    fn foreign_type_id_state_substitution_fails_in_ckb_vm() {
+        let mut fixture = spend_fixture(b"fixture-valid");
+        let mut deps = fixture.tx.cell_deps().into_iter().collect::<Vec<_>>();
+        let state_dep_index = deps
+            .iter()
+            .position(|dep| {
+                fixture
+                    .context
+                    .get_cell(&dep.out_point())
+                    .is_some_and(|(_, data)| data.starts_with(b"CKAS"))
+            })
+            .expect("state cell dep");
+        let state_out_point = deps[state_dep_index].out_point();
+        let (state_cell, state_data) = fixture
+            .context
+            .get_cell(&state_out_point)
+            .expect("state cell");
+        let foreign_type = Script::new_builder()
+            .code_hash(ckb_testtool::ckb_chain_spec::consensus::TYPE_ID_CODE_HASH.pack())
+            .hash_type(ScriptHashType::Type)
+            .args([0x5au8; 32].as_slice().pack())
+            .build();
+        let foreign_out_point = fixture.context.create_cell(
+            state_cell
+                .as_builder()
+                .type_(Some(foreign_type).pack())
+                .build(),
+            state_data,
+        );
+        deps[state_dep_index] = CellDep::new_builder().out_point(foreign_out_point).build();
+        let substituted = fixture.tx.as_advanced_builder().set_cell_deps(deps).build();
+        assert!(fixture.context.verify_tx(&substituted, MAX_CYCLES).is_err());
+    }
+
+    #[test]
+    fn unknown_state_flags_algorithm_and_verifier_abi_fail_in_ckb_vm() {
+        let mut fixture = spend_fixture(b"fixture-valid");
+        let original_deps = fixture.tx.cell_deps().into_iter().collect::<Vec<_>>();
+        let state_dep_index = original_deps
+            .iter()
+            .position(|dep| {
+                fixture
+                    .context
+                    .get_cell(&dep.out_point())
+                    .is_some_and(|(_, data)| data.starts_with(b"CKAS"))
+            })
+            .expect("state cell dep");
+        let (state_cell, state_data) = fixture
+            .context
+            .get_cell(&original_deps[state_dep_index].out_point())
+            .expect("state cell");
+
+        let mut unknown_flags = state_data.to_vec();
+        unknown_flags[5] = 0x80;
+        let mut unknown_algorithm = state_data.to_vec();
+        unknown_algorithm[36..38].copy_from_slice(&0xffffu16.to_le_bytes());
+        let mut unknown_abi = state_data.to_vec();
+        unknown_abi[43] = 2;
+
+        for (family, invalid_state) in [
+            ("flags", unknown_flags),
+            ("algorithm", unknown_algorithm),
+            ("verifier ABI", unknown_abi),
+        ] {
+            let invalid_out_point = fixture
+                .context
+                .create_cell(state_cell.clone(), Bytes::from(invalid_state));
+            let mut deps = original_deps.clone();
+            deps[state_dep_index] = CellDep::new_builder().out_point(invalid_out_point).build();
+            let transaction = fixture.tx.as_advanced_builder().set_cell_deps(deps).build();
+            assert!(
+                fixture.context.verify_tx(&transaction, MAX_CYCLES).is_err(),
+                "accepted unknown {family}"
+            );
+        }
+    }
+
     fn cryptographic_spend(
         verifier_name: &str,
         algorithm_id: u16,
@@ -380,8 +458,11 @@ mod vm {
         String::from_utf8(output).unwrap()
     }
 
-    #[test]
-    fn webauthn_es256_signature_is_verified_inside_ckb_vm() {
+    fn webauthn_spend_fixture() -> (
+        Context,
+        ckb_testtool::ckb_types::core::TransactionView,
+        Bytes,
+    ) {
         use p256::ecdsa::{signature::hazmat::PrehashSigner, Signature, SigningKey};
         use sha2::{Digest, Sha256};
 
@@ -396,7 +477,7 @@ mod vm {
         let mut aux = vec![1];
         aux.extend_from_slice(&rp_id_hash);
         aux.extend_from_slice(&ckb_hash(origin));
-        let (context, tx, args) = cryptographic_spend(
+        cryptographic_spend(
             "verifier-p256",
             ALG_P256_WEBAUTHN,
             aux,
@@ -430,12 +511,64 @@ mod vm {
                 proof.extend_from_slice(der.as_bytes());
                 proof
             },
-        );
+        )
+    }
+
+    #[test]
+    fn webauthn_es256_signature_is_verified_inside_ckb_vm() {
+        let (context, tx, args) = webauthn_spend_fixture();
         assert_eq!(tx.output(0).unwrap().lock().args().raw_data(), args);
         let cycles = context
             .verify_tx(&tx, 500_000_000)
             .expect("WebAuthn ES256 verification in CKB-VM");
         println!("WebAuthn ES256 spend cycles: {cycles}");
+    }
+
+    #[test]
+    fn signed_transaction_mutation_families_fail_in_ckb_vm() {
+        let (context, tx, _) = webauthn_spend_fixture();
+
+        let mut inputs = tx.inputs().into_iter().collect::<Vec<_>>();
+        inputs[0] = inputs[0].clone().as_builder().since(1u64).build();
+        let changed_input = tx.as_advanced_builder().set_inputs(inputs).build();
+
+        let mut outputs = tx.outputs().into_iter().collect::<Vec<_>>();
+        outputs[0] = outputs[0].clone().as_builder().capacity(10_001u64).build();
+        let changed_output = tx.as_advanced_builder().set_outputs(outputs).build();
+
+        let changed_output_data = tx
+            .as_advanced_builder()
+            .set_outputs_data(vec![Bytes::from_static(b"mutated-asset").pack()])
+            .build();
+
+        let first_witness =
+            WitnessArgs::from_slice(&tx.witnesses().get(0).unwrap().raw_data()).unwrap();
+        let changed_first_witness = first_witness
+            .as_builder()
+            .input_type(Some(Bytes::from_static(b"mutation")).pack())
+            .build()
+            .as_bytes();
+        let changed_witness_field = tx
+            .as_advanced_builder()
+            .set_witnesses(vec![changed_first_witness.pack()])
+            .build();
+
+        let mut witnesses = tx.witnesses().into_iter().collect::<Vec<_>>();
+        witnesses.push(Bytes::from_static(b"extra-witness").pack());
+        let added_extra_witness = tx.as_advanced_builder().set_witnesses(witnesses).build();
+
+        for (family, transaction) in [
+            ("input", changed_input),
+            ("output", changed_output),
+            ("output data", changed_output_data),
+            ("first witness field", changed_witness_field),
+            ("extra witness", added_extra_witness),
+        ] {
+            assert!(
+                context.verify_tx(&transaction, MAX_CYCLES).is_err(),
+                "accepted signed {family} mutation"
+            );
+        }
     }
 
     fn transition_fixture(

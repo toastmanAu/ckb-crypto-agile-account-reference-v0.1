@@ -1,6 +1,6 @@
 {
   "package": "ckb-crypto-agile-account-reference-v0.1",
-  "status": "Reference implementation scaffold/specification",
+  "status": "Implemented unaudited reference",
   "primary_doc": "CKB-Crypto-Agile-Account-Reference-Implementation-v0.1.docx",
   "toolchain": {
     "ckb-std": "1.1.0",

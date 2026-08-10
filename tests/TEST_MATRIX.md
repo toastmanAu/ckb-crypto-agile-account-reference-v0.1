@@ -2,8 +2,10 @@
 
 T01 through T10 are exercised as one ordered scenario by
 `story::complete_crypto_migration_recovery_and_verifier_upgrade_story_runs_in_ckb_vm`.
-The story reconstructs each successor as the next transaction's exact current
-state and asserts the same `0x01 || account_id` lock args at every asset/state
+The story executes Type ID creation and registers each verified successor under
+its real transaction outpoint before the next transaction consumes or references
+it. The originally funded asset outpoint is likewise carried through every
+spend. It asserts the same `0x01 || account_id` lock args at every asset/state
 output. Focused negative and parser-corpus tests cover the remaining rows.
 
 | ID | Test | Expected |

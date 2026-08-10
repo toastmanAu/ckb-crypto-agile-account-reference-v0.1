@@ -6,6 +6,7 @@ use ckb_account_protocol::{
     ALG_MLDSA65, ALG_P256_WEBAUTHN, ALG_SLHDSA, CAP_RECOVERY, CAP_ROTATE, CAP_SPEND, OP_RECOVERY,
     OP_ROTATE, OP_SPEND, STATE_FLAG_RECOVERY_ENABLED, VERIFIER_ABI_V1,
 };
+use ckb_hash::new_blake2b;
 use ckb_testtool::{
     ckb_types::{
         bytes::Bytes,
@@ -140,14 +141,6 @@ fn binary(name: &str) -> Bytes {
         .into()
 }
 
-fn type_id_script() -> Script {
-    Script::new_builder()
-        .code_hash(ckb_testtool::ckb_chain_spec::consensus::TYPE_ID_CODE_HASH.pack())
-        .hash_type(ScriptHashType::Type)
-        .args([0xa5u8; 32].as_slice().pack())
-        .build()
-}
-
 fn base64url(input: &[u8; 32]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut output = Vec::with_capacity(43);
@@ -216,6 +209,8 @@ fn p256_proof(digest: &[u8; 32], public_key: &[u8]) -> Vec<u8> {
 struct StoryEnv {
     context: Context,
     account_out_point: OutPoint,
+    always_success_out_point: OutPoint,
+    funding_out_point: OutPoint,
     verifier_out_points: Vec<OutPoint>,
     account_lock: Script,
     state_type: Script,
@@ -231,6 +226,22 @@ impl StoryEnv {
     fn new() -> Self {
         let mut context = Context::new_with_deterministic_rng();
         let account_out_point = context.deploy_cell(binary("account-lock"));
+        let always_success_out_point =
+            context.deploy_cell(ckb_testtool::builtin::ALWAYS_SUCCESS.clone());
+        let always_success_lock = context
+            .build_script_with_hash_type(
+                &always_success_out_point,
+                ScriptHashType::Data2,
+                Bytes::new(),
+            )
+            .expect("always-success lock");
+        let funding_out_point = context.create_cell(
+            CellOutput::new_builder()
+                .capacity(120_000_000_000u64)
+                .lock(always_success_lock)
+                .build(),
+            Bytes::new(),
+        );
         let p256 = binary("verifier-p256");
         let ml = binary("verifier-mldsa-adapter");
         let slh = binary("verifier-slhdsa-adapter");
@@ -245,7 +256,19 @@ impl StoryEnv {
         let upgraded_ml = Bytes::from(upgraded_ml);
         let upgraded_ml_hash = CellOutput::calc_data_hash(&upgraded_ml).unpack();
         let upgraded_ml_out_point = context.deploy_cell(upgraded_ml);
-        let state_type = type_id_script();
+        let creation_input = CellInput::new_builder()
+            .previous_output(funding_out_point.clone())
+            .build();
+        let mut type_id_args = [0u8; 32];
+        let mut hasher = new_blake2b();
+        hasher.update(creation_input.as_slice());
+        hasher.update(&0u64.to_le_bytes());
+        hasher.finalize(&mut type_id_args);
+        let state_type = Script::new_builder()
+            .code_hash(ckb_testtool::ckb_chain_spec::consensus::TYPE_ID_CODE_HASH.pack())
+            .hash_type(ScriptHashType::Type)
+            .args(type_id_args.as_slice().pack())
+            .build();
         let account_id: [u8; 32] = state_type.calc_script_hash().unpack();
         let mut args = vec![1];
         args.extend_from_slice(&account_id);
@@ -260,6 +283,8 @@ impl StoryEnv {
         Self {
             context,
             account_out_point,
+            always_success_out_point,
+            funding_out_point,
             verifier_out_points: vec![
                 p256_out_point,
                 ml_out_point,
@@ -294,6 +319,62 @@ impl StoryEnv {
             recovery_since,
             authenticators: authenticators.iter().map(StoryAuth::state_entry).collect(),
         }
+    }
+
+    fn register_output(&mut self, transaction: &TransactionView, index: usize) -> OutPoint {
+        let out_point = OutPoint::new_builder()
+            .tx_hash(transaction.hash())
+            .index(u32::try_from(index).expect("output index"))
+            .build();
+        let output = transaction.output(index).expect("registered output");
+        let data = transaction
+            .outputs_data()
+            .get(index)
+            .expect("registered output data")
+            .raw_data();
+        self.context
+            .create_cell_with_out_point(out_point.clone(), output, data);
+        out_point
+    }
+
+    fn create_account(&mut self, state: &AccountState) -> (OutPoint, OutPoint) {
+        let state_data = encode_state(state).expect("initial state");
+        let transaction = TransactionBuilder::default()
+            .input(
+                CellInput::new_builder()
+                    .previous_output(self.funding_out_point.clone())
+                    .build(),
+            )
+            .output(
+                CellOutput::new_builder()
+                    .capacity(100_000_000_000u64)
+                    .lock(self.account_lock.clone())
+                    .type_(Some(self.state_type.clone()).pack())
+                    .build(),
+            )
+            .output(
+                CellOutput::new_builder()
+                    .capacity(20_000_000_000u64)
+                    .lock(self.account_lock.clone())
+                    .build(),
+            )
+            .output_data(Bytes::from(state_data).pack())
+            .output_data(Bytes::from_static(b"asset").pack())
+            .cell_dep(
+                CellDep::new_builder()
+                    .out_point(self.always_success_out_point.clone())
+                    .build(),
+            )
+            .build();
+        self.context
+            .verify_tx(&transaction, MAX_CYCLES)
+            .expect("Type ID account creation in CKB-VM");
+        for output in transaction.outputs() {
+            assert_eq!(output.lock().args().raw_data(), self.lock_args);
+        }
+        let state_out_point = self.register_output(&transaction, 0);
+        let asset_out_point = self.register_output(&transaction, 1);
+        (state_out_point, asset_out_point)
     }
 
     fn code_deps(&self, mut builder: TransactionBuilder) -> TransactionBuilder {
@@ -365,38 +446,34 @@ impl StoryEnv {
             .as_bytes()
     }
 
-    fn spend(&mut self, state: &AccountState, signers: &[StoryAuth], should_pass: bool) {
+    fn spend(
+        &mut self,
+        state: &AccountState,
+        state_out_point: &OutPoint,
+        asset_out_point: &OutPoint,
+        signers: &[StoryAuth],
+        should_pass: bool,
+    ) -> OutPoint {
         let state_data = encode_state(state).expect("state");
-        let state_out_point = self.context.create_cell(
-            CellOutput::new_builder()
-                .capacity(10_000u64)
-                .lock(self.account_lock.clone())
-                .type_(Some(self.state_type.clone()).pack())
-                .build(),
-            Bytes::from(state_data.clone()),
-        );
-        let asset_out_point = self.context.create_cell(
-            CellOutput::new_builder()
-                .capacity(10_000u64)
-                .lock(self.account_lock.clone())
-                .build(),
-            Bytes::from_static(b"asset"),
-        );
         let provisional = Self::provisional_witness(OP_SPEND, state, signers);
         let builder = TransactionBuilder::default()
             .input(
                 CellInput::new_builder()
-                    .previous_output(asset_out_point)
+                    .previous_output(asset_out_point.clone())
                     .build(),
             )
             .output(
                 CellOutput::new_builder()
-                    .capacity(10_000u64)
+                    .capacity(20_000_000_000u64)
                     .lock(self.account_lock.clone())
                     .build(),
             )
             .output_data(Bytes::from_static(b"asset").pack())
-            .cell_dep(CellDep::new_builder().out_point(state_out_point).build())
+            .cell_dep(
+                CellDep::new_builder()
+                    .out_point(state_out_point.clone())
+                    .build(),
+            )
             .witness(provisional.clone().pack());
         let transaction = self.code_deps(builder).build();
         let witness = self.signed_witness(
@@ -420,42 +497,38 @@ impl StoryEnv {
                 .raw_data(),
             self.lock_args
         );
-        assert_eq!(
-            self.context.verify_tx(&transaction, MAX_CYCLES).is_ok(),
-            should_pass
-        );
+        let result = self.context.verify_tx(&transaction, MAX_CYCLES);
+        assert_eq!(result.is_ok(), should_pass);
+        if should_pass {
+            self.register_output(&transaction, 0)
+        } else {
+            asset_out_point.clone()
+        }
     }
 
     fn transition(
         &mut self,
-        operation: u8,
-        since: u64,
+        operation_and_since: (u8, u64),
         current: &AccountState,
+        current_out_point: &OutPoint,
         successor: &AccountState,
         signers: &[StoryAuth],
         should_pass: bool,
-    ) {
+    ) -> OutPoint {
+        let (operation, since) = operation_and_since;
         let current_data = encode_state(current).expect("current state");
         let successor_data = encode_state(successor).expect("successor state");
-        let state_out_point = self.context.create_cell(
-            CellOutput::new_builder()
-                .capacity(10_000u64)
-                .lock(self.account_lock.clone())
-                .type_(Some(self.state_type.clone()).pack())
-                .build(),
-            Bytes::from(current_data.clone()),
-        );
         let provisional = Self::provisional_witness(operation, current, signers);
         let builder = TransactionBuilder::default()
             .input(
                 CellInput::new_builder()
                     .since(since)
-                    .previous_output(state_out_point)
+                    .previous_output(current_out_point.clone())
                     .build(),
             )
             .output(
                 CellOutput::new_builder()
-                    .capacity(10_000u64)
+                    .capacity(100_000_000_000u64)
                     .lock(self.account_lock.clone())
                     .type_(Some(self.state_type.clone()).pack())
                     .build(),
@@ -484,10 +557,13 @@ impl StoryEnv {
                 .raw_data(),
             self.lock_args
         );
-        assert_eq!(
-            self.context.verify_tx(&transaction, MAX_CYCLES).is_ok(),
-            should_pass
-        );
+        let result = self.context.verify_tx(&transaction, MAX_CYCLES);
+        assert_eq!(result.is_ok(), should_pass);
+        if should_pass {
+            self.register_output(&transaction, 0)
+        } else {
+            current_out_point.clone()
+        }
     }
 }
 
@@ -511,32 +587,69 @@ fn complete_crypto_migration_recovery_and_verifier_upgrade_story_runs_in_ckb_vm(
     };
 
     let state0 = env.state(0, 1, 1, 100, core::slice::from_ref(&p256));
-    env.spend(&state0, core::slice::from_ref(&p256), true);
+    let (mut state_out_point, mut asset_out_point) = env.create_account(&state0);
+    asset_out_point = env.spend(
+        &state0,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&p256),
+        true,
+    );
 
     let state1 = env.state(1, 2, 2, 100, &[p256.clone(), ml.clone()]);
-    env.transition(
-        OP_ROTATE,
-        0,
+    state_out_point = env.transition(
+        (OP_ROTATE, 0),
         &state0,
+        &state_out_point,
         &state1,
         core::slice::from_ref(&p256),
         true,
     );
-    env.spend(&state1, core::slice::from_ref(&p256), false);
-    env.spend(&state1, core::slice::from_ref(&ml), false);
-    env.spend(&state1, &[p256.clone(), ml.clone()], true);
+    env.spend(
+        &state1,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&p256),
+        false,
+    );
+    env.spend(
+        &state1,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&ml),
+        false,
+    );
+    asset_out_point = env.spend(
+        &state1,
+        &state_out_point,
+        &asset_out_point,
+        &[p256.clone(), ml.clone()],
+        true,
+    );
 
     let state2 = env.state(2, 1, 2, 100, &[ml.clone(), slh.clone()]);
-    env.transition(
-        OP_ROTATE,
-        0,
+    state_out_point = env.transition(
+        (OP_ROTATE, 0),
         &state1,
+        &state_out_point,
         &state2,
         &[p256.clone(), ml.clone()],
         true,
     );
-    env.spend(&state2, core::slice::from_ref(&ml), true);
-    env.spend(&state2, core::slice::from_ref(&slh), true);
+    asset_out_point = env.spend(
+        &state2,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&ml),
+        true,
+    );
+    asset_out_point = env.spend(
+        &state2,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&slh),
+        true,
+    );
 
     let upgraded_ml = StoryAuth {
         verifier_hash: env.upgraded_ml_hash,
@@ -544,39 +657,51 @@ fn complete_crypto_migration_recovery_and_verifier_upgrade_story_runs_in_ckb_vm(
     };
     let state3 = env.state(3, 1, 2, 100, &[upgraded_ml.clone(), slh.clone()]);
     env.transition(
-        OP_ROTATE,
-        0,
+        (OP_ROTATE, 0),
         &state2,
+        &state_out_point,
         &state3,
         core::slice::from_ref(&ml),
         false,
     );
-    env.transition(
-        OP_ROTATE,
-        0,
+    state_out_point = env.transition(
+        (OP_ROTATE, 0),
         &state2,
+        &state_out_point,
         &state3,
         &[ml.clone(), slh.clone()],
         true,
     );
-    env.spend(&state3, core::slice::from_ref(&upgraded_ml), true);
+    asset_out_point = env.spend(
+        &state3,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&upgraded_ml),
+        true,
+    );
 
     let recovered = env.state(4, 1, 1, 100, core::slice::from_ref(&p256));
     env.transition(
-        OP_RECOVERY,
-        99,
+        (OP_RECOVERY, 99),
         &state3,
+        &state_out_point,
         &recovered,
         core::slice::from_ref(&slh),
         false,
     );
-    env.transition(
-        OP_RECOVERY,
-        100,
+    state_out_point = env.transition(
+        (OP_RECOVERY, 100),
         &state3,
+        &state_out_point,
         &recovered,
         core::slice::from_ref(&slh),
         true,
     );
-    env.spend(&recovered, core::slice::from_ref(&p256), true);
+    env.spend(
+        &recovered,
+        &state_out_point,
+        &asset_out_point,
+        core::slice::from_ref(&p256),
+        true,
+    );
 }
