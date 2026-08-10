@@ -347,7 +347,10 @@ Important limitations include:
 See [SECURITY.md](SECURITY.md) for the full deviation and review checklist.
 The structured attacker model and audit boundaries are in
 [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) and
-[docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md).
+[docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md). A current provider comparison and
+ready-to-send proposal brief are in
+[docs/AUDITOR_SHORTLIST.md](docs/AUDITOR_SHORTLIST.md) and
+[docs/AUDIT_REQUEST.md](docs/AUDIT_REQUEST.md).
 
 ## Versioning and contributions
 

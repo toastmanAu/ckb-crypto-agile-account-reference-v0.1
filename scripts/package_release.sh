@@ -52,6 +52,7 @@ cp README.md SECURITY.md CYCLES.md LICENSE Cargo.lock rust-toolchain.toml \
   "$staging_directory/"
 cp docs/REFERENCE_IMPLEMENTATION_SPEC.md docs/DEPLOYMENT.md \
   docs/REPRODUCIBLE_BUILDS.md docs/THREAT_MODEL.md docs/AUDIT_SCOPE.md \
+  docs/AUDITOR_SHORTLIST.md docs/AUDIT_REQUEST.md \
   "$staging_directory/docs/"
 cp deploy/reference-deployments.json "$staging_directory/"
 
