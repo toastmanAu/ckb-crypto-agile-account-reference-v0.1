@@ -51,6 +51,23 @@ mod vm {
         lock_args: Bytes,
     }
 
+    fn write_debug_vector(name: &str, fixture: &SpendFixture) {
+        if std::env::var_os("CKB_UPDATE_DEBUG_VECTORS").is_none() {
+            return;
+        }
+        let dump = fixture
+            .context
+            .dump_tx(&fixture.tx)
+            .expect("dump transaction");
+        let vectors = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vectors");
+        fs::create_dir_all(&vectors).expect("create vectors directory");
+        fs::write(
+            vectors.join(name),
+            serde_json::to_vec_pretty(&dump).expect("serialize transaction"),
+        )
+        .expect("write transaction vector");
+    }
+
     fn spend_fixture(proof: &[u8]) -> SpendFixture {
         let mut context = Context::new_with_deterministic_rng();
         let account_out_point = context.deploy_cell(binary("account-lock"));
@@ -157,17 +174,7 @@ mod vm {
     #[test]
     fn fixture_verifier_runs_through_ckb2023_spawn_pipe() {
         let fixture = spend_fixture(b"fixture-valid");
-        let dump = fixture
-            .context
-            .dump_tx(&fixture.tx)
-            .expect("dump transaction");
-        let vectors = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vectors");
-        fs::create_dir_all(&vectors).expect("create vectors directory");
-        fs::write(
-            vectors.join("fixture-spend.json"),
-            serde_json::to_vec_pretty(&dump).expect("serialize transaction"),
-        )
-        .expect("write transaction vector");
+        write_debug_vector("fixture-spend.json", &fixture);
         let output_args = fixture.tx.output(0).unwrap().lock().args().raw_data();
         assert_eq!(output_args, fixture.lock_args);
         let cycles = fixture
@@ -181,17 +188,7 @@ mod vm {
     #[test]
     fn nonzero_child_exit_contributes_no_weight() {
         let fixture = spend_fixture(b"fixture-invalid");
-        let dump = fixture
-            .context
-            .dump_tx(&fixture.tx)
-            .expect("dump transaction");
-        let vectors = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vectors");
-        fs::create_dir_all(&vectors).expect("create vectors directory");
-        fs::write(
-            vectors.join("fixture-invalid-spend.json"),
-            serde_json::to_vec_pretty(&dump).expect("serialize transaction"),
-        )
-        .expect("write transaction vector");
+        write_debug_vector("fixture-invalid-spend.json", &fixture);
         assert!(fixture.context.verify_tx(&fixture.tx, MAX_CYCLES).is_err());
     }
 
@@ -588,3 +585,6 @@ mod vm {
             .expect("authenticated verifier reference upgrade");
     }
 }
+
+#[cfg(test)]
+mod story;

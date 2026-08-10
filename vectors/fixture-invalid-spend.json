@@ -5,7 +5,7 @@
         "input": {
           "since": "0x0",
           "previous_output": {
-            "tx_hash": "0xc84a283918259193fc4192ddcd92ce271329f199c752770b326867934abda9b9",
+            "tx_hash": "0x83d2eaae746e406c44b5d2cb87b1fa1612f859f3d4ba5597c54475da1f6aa6ac",
             "index": "0x0"
           }
         },
@@ -26,7 +26,7 @@
       {
         "cell_dep": {
           "out_point": {
-            "tx_hash": "0x9d4eb175829a47c101cf705af03840ac5708a627c56d3d0c1b108574aacd3deb",
+            "tx_hash": "0x3dad4d1300b962e8f6cfdbddf00ef24c472d1462921500cbd04f7ec81f1f442a",
             "index": "0x0"
           },
           "dep_type": "code"
@@ -104,7 +104,7 @@
     "cell_deps": [
       {
         "out_point": {
-          "tx_hash": "0x9d4eb175829a47c101cf705af03840ac5708a627c56d3d0c1b108574aacd3deb",
+          "tx_hash": "0x3dad4d1300b962e8f6cfdbddf00ef24c472d1462921500cbd04f7ec81f1f442a",
           "index": "0x0"
         },
         "dep_type": "code"
@@ -129,7 +129,7 @@
       {
         "since": "0x0",
         "previous_output": {
-          "tx_hash": "0xc84a283918259193fc4192ddcd92ce271329f199c752770b326867934abda9b9",
+          "tx_hash": "0x83d2eaae746e406c44b5d2cb87b1fa1612f859f3d4ba5597c54475da1f6aa6ac",
           "index": "0x0"
         }
       }

@@ -37,6 +37,10 @@ ckb-debugger --mode full --tx-file vectors/fixture-spend.json \
   --script input.0.lock --max-cycles 500000000
 ```
 
+To intentionally regenerate the tracked debugger transactions, run the two
+fixture tests with `CKB_UPDATE_DEBUG_VECTORS=1`. Normal test runs never rewrite
+tracked vectors.
+
 `scripts/check.sh` runs the same validation sequence. Tests use optimized
 RISC-V binaries when present, so build the contracts first when measuring
 cycles.
@@ -51,9 +55,11 @@ cycles.
 - `vectors`: deterministic binary conformance vector and debugger transactions
 - `deploy`: local artifact hashes and upstream testnet/mainnet references
 
-The VM suite covers all three real signature paths, pipe/exit semantics,
-threshold-two rotation, sequence advancement, delayed recovery, state deletion,
-and byte-identical AccountLock args. See `tests/TEST_MATRIX.md` for the precise
-coverage boundary.
+The VM suite includes a single chained migration story covering P-256 spend,
+P-256+ML-DSA threshold-two authorization, migration to ML-DSA+SLH-DSA,
+threshold-one PQ spends, threshold-two rotation, a byte-distinct compatible
+verifier upgrade, delayed recovery, and byte-identical AccountLock args. It also
+covers pipe/exit semantics, sequence advancement, and state deletion. See
+`tests/TEST_MATRIX.md` for the complete matrix.
 
 This is unaudited reference code. Review `SECURITY.md` before deployment.
