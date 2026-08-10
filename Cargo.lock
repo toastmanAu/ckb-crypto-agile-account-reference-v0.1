@@ -601,9 +601,9 @@ dependencies = [
 
 [[package]]
 name = "ckb-types"
-version = "1.1.0"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb1a584004fc6f2066a024b247e498305273cb37c14d34b23787977baefc018e"
+checksum = "e05da0ac5d3f7fbd8563b1aaae39d45f1d3f3172686f73bd2a0dffb394b37fce"
 dependencies = [
  "bit-vec",
  "bytes",
