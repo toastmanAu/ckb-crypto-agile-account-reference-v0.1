@@ -1,0 +1,20 @@
+{
+  "package": "ckb-crypto-agile-account-reference-v0.1",
+  "status": "Reference implementation scaffold/specification",
+  "primary_doc": "CKB-Crypto-Agile-Account-Reference-Implementation-v0.1.docx",
+  "toolchain": {
+    "ckb-std": "1.1.0",
+    "ckb-testtool": "1.1.1"
+  },
+  "contracts": [
+    "account-lock",
+    "verifier-p256",
+    "verifier-mldsa-adapter",
+    "verifier-slhdsa-adapter"
+  ],
+  "required_algorithm_families": [
+    "P-256/WebAuthn",
+    "ML-DSA",
+    "SLH-DSA"
+  ]
+}

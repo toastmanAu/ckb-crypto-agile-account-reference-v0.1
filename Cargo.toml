@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/protocol",
+  "crates/host",
+  "crates/test-fixtures",
+  "contracts/account-lock",
+  "contracts/verifier-p256",
+  "contracts/verifier-mldsa-adapter",
+  "contracts/verifier-slhdsa-adapter",
+  "contracts/verifier-fixture",
+  "tests",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "0.1.0"
+
+# Reference pins current as of 2026-08-10.
+[workspace.dependencies]
+ckb-std = { version = "=1.1.0", default-features = false, features = ["allocator", "dummy-atomic"] }
+ckb-testtool = "=1.1.1"
+ckb-types = "=1.1.0"
+ckb-hash = { version = "=1.1.0", default-features = false, features = ["ckb-contract"] }
+molecule = "0.9"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
+sha2 = { version = "=0.11.0", default-features = false }
+ml-dsa = { version = "=0.1.1", default-features = false }
+slh-dsa = { version = "=0.2.0-rc.5", default-features = false }
+
+[profile.release]
+overflow-checks = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

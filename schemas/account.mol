@@ -1,0 +1,15 @@
+// Host-side Molecule types only where CKB-native structures are useful.
+// AccountStateV1 / AccountWitnessV1 / VerifierRequestV1 intentionally use the
+// fixed custom byte formats from the RFC so independent C/Rust verifiers can
+// parse them without Molecule code generation.
+
+array Byte32 [byte; 32];
+array Byte20 [byte; 20];
+
+table DeploymentRefV1 {
+    code_hash: Byte32,
+    hash_type: byte,
+    dep_type: byte,
+    tx_hash: Byte32,
+    index: Uint32,
+}

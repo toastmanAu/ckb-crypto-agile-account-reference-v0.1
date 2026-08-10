@@ -1,0 +1,19 @@
+[package]
+name = "ckb-account-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+ckb-testtool.workspace = true
+ckb-types.workspace = true
+ckb-hash.workspace = true
+ckb-account-protocol = { path = "../crates/protocol" }
+ckb-account-host = { path = "../crates/host" }
+ckb-account-test-fixtures = { path = "../crates/test-fixtures" }
+serde_json.workspace = true
+p256.workspace = true
+sha2.workspace = true
+ml-dsa.workspace = true
+slh-dsa.workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "ckb-account-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ckb-account-protocol = { path = "../protocol" }
+ckb-types.workspace = true
+ckb-hash.workspace = true
+serde.workspace = true
+thiserror.workspace = true

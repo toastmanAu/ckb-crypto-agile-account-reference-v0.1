@@ -1,0 +1,10 @@
+[package]
+name = "account-lock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ckb-std.workspace = true
+ckb-account-protocol = { path = "../../crates/protocol", default-features = false }
+ckb-hash = { workspace = true, default-features = false, features = ["ckb-contract"] }

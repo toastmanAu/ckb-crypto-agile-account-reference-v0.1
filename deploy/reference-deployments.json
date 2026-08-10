@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-10",
+  "local": {
+    "network": "local",
+    "published": false,
+    "hash_type": "data2",
+    "artifacts": {
+      "account_lock": {
+        "path": "target/riscv64imac-unknown-none-elf/release/account-lock",
+        "data_hash": "0xc546913fec9a02ebdf59c7e22e38bd5d9bb07bea81985c4cf8288040f0480abe"
+      },
+      "verifier_p256": {
+        "path": "target/riscv64imac-unknown-none-elf/release/verifier-p256",
+        "data_hash": "0x376a3e1bfefc57d63cff2e5d022283800fb6b5f014b5edac4be573d58a7b124a"
+      },
+      "verifier_mldsa65": {
+        "path": "target/riscv64imac-unknown-none-elf/release/verifier-mldsa-adapter",
+        "data_hash": "0xc4c5b585443a9543e70eb7228cc3a3cacd2ce3a46f4d57523c612c94d210d0b6"
+      },
+      "verifier_slhdsa_sha2_128s": {
+        "path": "target/riscv64imac-unknown-none-elf/release/verifier-slhdsa-adapter",
+        "data_hash": "0xb0c29ae45ff35bd831d59b38d0417d030be43b7a8be6ec90036005636157cd92"
+      }
+    }
+  },
+  "testnet": {
+    "published": false,
+    "note": "The local adapter artifacts have no claimed testnet outpoints. Publish the exact ELFs above, then record immutable outpoints here. The following are upstream engineering references only.",
+    "upstream_references": {
+      "mldsa_rustcrypto_v2": {
+        "code_hash": "0xd70653f7fd51e173ec506b76081f37bf4acebb8a15dc79e6d4ad43ca4d3b78a4",
+        "hash_type": "type"
+      },
+      "slhdsa_fips205": {
+        "code_hash": "0x147ecbb5c5127d982ee1362d2c2bb4267803da2eb006d150e88af6caaa0a7eaf",
+        "hash_type": "data1",
+        "tx_hash": "0x631d9a6049fb1fc3790e89d9daf35abe535b5e754cd8c3404319319710f0b106",
+        "index": "0x0",
+        "dep_type": "code"
+      }
+    }
+  }
+}
