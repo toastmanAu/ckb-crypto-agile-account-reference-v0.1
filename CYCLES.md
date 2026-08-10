@@ -7,9 +7,9 @@ CKB2023 scripts (`data2`), `ckb-testtool` 1.1.1, and the deterministic tests in
 | Path | Cycles |
 |---|---:|
 | Fixture spawn/pipe spend | 187,707 |
-| WebAuthn ES256/P-256 spend | 6,136,398 |
-| ML-DSA-65 spend | 14,007,993 |
-| SLH-DSA SHA2-128s spend | 20,247,366 |
+| WebAuthn ES256/P-256 spend | 6,203,076 |
+| ML-DSA-65 spend | 14,008,047 |
+| SLH-DSA SHA2-128s spend | 20,381,474 |
 
 The standalone `ckb-debugger` replay of `vectors/fixture-spend.json` returned
 exit code 0. Its pre-gather total was 187,707 cycles and actual-run total was

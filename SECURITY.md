@@ -3,6 +3,12 @@
 This repository is unaudited reference code and must not be treated as a
 production security review of the frozen protocol.
 
+Privately report a suspected vulnerability through this repository's GitHub
+Security Advisory interface. Do not include live private keys, recovery
+credentials, or unpublished authenticator material in a report. The current
+threat model and proposed review boundary are documented in
+`docs/THREAT_MODEL.md` and `docs/AUDIT_SCOPE.md`.
+
 ## Upstream implementation differences
 
 - ML-DSA-65 uses the RustCrypto `ml-dsa` 0.1.1 API and the protocol's profile-1

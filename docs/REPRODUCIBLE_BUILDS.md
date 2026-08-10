@@ -84,3 +84,15 @@ test run that changes tracked files.
 
 For a release, record at least the source commit, Rust version output, host
 platform, ELF sizes, CKB data hashes, test result, and deployment outpoints.
+
+## Release-candidate archive
+
+```sh
+scripts/package_release.sh v0.1.0-rc.1 /tmp/ckb-account-release
+```
+
+The script refuses to overwrite existing output, normalizes archive member
+order, timestamps, owner, and group, and emits both `CKB_DATA_HASHES.json` and
+`SHA256SUMS`. It also refuses a dirty worktree and records the exact source
+commit and Rust/Cargo versions in `BUILD_INFO.txt`. Re-run it into another empty
+directory and compare archive digests before handing a candidate to reviewers.

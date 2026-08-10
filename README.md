@@ -22,7 +22,8 @@ Positive cryptographic tests execute the optimized RISC-V verifier binaries in
 CKB-VM. Host-only signature checks are not counted as protocol conformance.
 
 > This repository is reference code, not audited production software. Read
-> [SECURITY.md](SECURITY.md) before evaluating it for deployment.
+> [SECURITY.md](SECURITY.md) and the
+> [threat model](docs/THREAT_MODEL.md) before evaluating it for deployment.
 
 ## Protocol status
 
@@ -234,9 +235,9 @@ Representative optimized CKB-VM measurements:
 | Path | Cycles |
 |---|---:|
 | Fixture spawn/pipe spend | 187,707 |
-| WebAuthn ES256/P-256 spend | 6,136,398 |
-| ML-DSA-65 spend | 14,007,993 |
-| SLH-DSA SHA2-128s spend | 20,247,366 |
+| WebAuthn ES256/P-256 spend | 6,203,076 |
+| ML-DSA-65 spend | 14,008,047 |
+| SLH-DSA SHA2-128s spend | 20,381,474 |
 
 Cryptographic signing APIs may randomize signatures, so exact instruction paths
 can vary slightly. See [CYCLES.md](CYCLES.md) for measurement details.
@@ -294,6 +295,26 @@ Detailed steps and the Type ID creation formula are in
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Reproducibility expectations are in
 [docs/REPRODUCIBLE_BUILDS.md](docs/REPRODUCIBLE_BUILDS.md).
 
+## Release candidates
+
+Assemble a deterministic, non-publishing release candidate locally:
+
+```sh
+scripts/package_release.sh v0.1.0-rc.1 /tmp/ckb-account-release
+```
+
+The output contains optimized contract ELFs, CKB data hashes, per-file SHA-256
+checksums, protocol and operational documents, conformance/debugger vectors,
+source commit/toolchain metadata, and a normalized tar archive with its own
+SHA-256 digest. The script refuses to package a dirty worktree or overwrite an
+existing candidate directory or archive.
+
+The GitHub `Release candidate` workflow performs the same packaging on an
+explicit manual dispatch and retains the archive as a workflow artifact. It
+does not create a GitHub Release, publish code cells, or perform a network
+deployment. Reviewers should use [docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md) to
+define an independent engagement against an exact source commit and archive.
+
 ## Repository map
 
 ```text
@@ -324,6 +345,9 @@ Important limitations include:
 - Cycle limits and dependency sizes require application-specific budgeting.
 
 See [SECURITY.md](SECURITY.md) for the full deviation and review checklist.
+The structured attacker model and audit boundaries are in
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) and
+[docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md).
 
 ## Versioning and contributions
 

@@ -1,0 +1,55 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version for the archive
+        required: true
+        default: v0.1.0-rc.1
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Reproducible RISC-V package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Install pinned Rust target
+        run: rustup target add riscv64imac-unknown-none-elf
+
+      - name: Restore Cargo caches
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-release-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml', 'ckb-contract.ld') }}
+          restore-keys: |
+            ${{ runner.os }}-release-
+            ${{ runner.os }}-cargo-
+
+      - name: Package release candidate
+        run: ./scripts/package_release.sh "${{ inputs.version }}" "$RUNNER_TEMP/release"
+
+      - name: Show package identities
+        run: |
+          cat "$RUNNER_TEMP"/release/*.sha256
+          cat "$RUNNER_TEMP"/release/*/CKB_DATA_HASHES.json
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4e
+        with:
+          name: ckb-crypto-agile-account-${{ inputs.version }}
+          path: |
+            ${{ runner.temp }}/release/*.tar.gz
+            ${{ runner.temp }}/release/*.sha256
+          if-no-files-found: error
+          retention-days: 30
