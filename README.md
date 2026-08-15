@@ -228,6 +228,20 @@ CKB_UPDATE_DEBUG_VECTORS=1 \
 
 Normal test runs never rewrite tracked vectors.
 
+### Verifier ABI v1 cross-package vectors
+
+`vectors/abi-v1/` mirrors the frozen vector set published by the
+`ckb-account-verifier-abi-v1` package, so the wire format cannot drift between
+the RFC and this implementation without failing the build.
+`crates/host/tests/abi_v1_conformance.rs` asserts that
+`encode_verifier_request` reproduces the published request bytes exactly, that
+the framing parser accepts that vector and rejects all eleven framing
+mutations, and that any newly published vector is classified rather than
+ignored. Five mutations are cross-checks the framing parser cannot own; they
+are deferred with a recorded reason in
+[tests/TEST_MATRIX.md](tests/TEST_MATRIX.md). Mirror provenance and the refresh
+procedure are in [vectors/abi-v1/PROVENANCE.md](vectors/abi-v1/PROVENANCE.md).
+
 ## Reference cycles
 
 Representative optimized CKB-VM measurements:

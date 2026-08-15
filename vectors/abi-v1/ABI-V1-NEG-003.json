@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-003",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "flags",
+  "description": "request_flags nonzero",
+  "expected": "reject"
+}

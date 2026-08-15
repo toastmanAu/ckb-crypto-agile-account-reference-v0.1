@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-016",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "eof",
+  "description": "premature EOF",
+  "expected": "reject"
+}
