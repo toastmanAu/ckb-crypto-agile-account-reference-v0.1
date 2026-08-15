@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  cellCapacityShannons,
   ckbDataHash,
   codeCellCapacityShannons,
   loadVerifiedArtifact,
@@ -86,5 +87,33 @@ describe("loadVerifiedArtifact", () => {
     // Either the debug ELF is absent or it hashes differently; both must fail
     // closed rather than deploy an unreproducible binary.
     expect(() => loadVerifiedArtifact(repoRoot, wrongPath)).toThrow();
+  });
+});
+
+describe("cellCapacityShannons", () => {
+  it("charges for a type script when the cell has one", () => {
+    // 8 capacity + lock(32+1+33) + type(32+1+32) + 177 data = 316 bytes
+    const capacity = cellCapacityShannons({
+      lockArgsLength: 33,
+      typeArgsLength: 32,
+      dataLength: 177,
+    });
+    expect(capacity).toBe(316n * 100_000_000n);
+  });
+
+  it("omits the type script cost when there is none", () => {
+    const capacity = cellCapacityShannons({
+      lockArgsLength: 33,
+      typeArgsLength: null,
+      dataLength: 0,
+    });
+    // 8 + (32+1+33) = 74 bytes
+    expect(capacity).toBe(74n * 100_000_000n);
+  });
+
+  it("agrees with codeCellCapacityShannons for a type-less cell", () => {
+    expect(
+      cellCapacityShannons({ lockArgsLength: 20, typeArgsLength: null, dataLength: 33_448 }),
+    ).toBe(codeCellCapacityShannons(33_448, SECP256K1_LOCK_ARGS_LENGTH));
   });
 });

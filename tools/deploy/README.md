@@ -62,6 +62,46 @@ A code cell cannot be edited after publication, so the pre-flight hash check has
 no second chance. Publishing a debug build or an ELF from a dirty checkout would
 produce a cell that no `AuthenticatorEntryV1` VerifierRef can resolve.
 
+## Creating an account
+
+State serialization stays in Rust. Produce the bytes first:
+
+```sh
+cd ../..
+cargo run -p ckb-account-host --example export_account_state -- \
+  my-account.json /tmp/account-state.bin
+```
+
+Then create the singleton state cell and one funded asset cell:
+
+```sh
+npm run bootstrap -- --state /tmp/account-state.bin
+CKB_PRIVKEY=0x... npm run bootstrap -- --state /tmp/account-state.bin --broadcast
+```
+
+`--asset-capacity` sets the funded cell in whole CKB (default 200). Results are
+written to `deploy/testnet-account.json`.
+
+### Why this transaction is checked so hard
+
+Two values cannot be computed until the first input is fixed: the Type ID args,
+which are `CKB_HASH(first_input || output_index)`, and the AccountLock args,
+which are `0x01 || account_id` where `account_id` is the Type ID *script hash*.
+Both are written as same-length placeholders before `completeInputsByCapacity`
+and patched afterwards, so patching cannot shift any cell's capacity.
+
+Consensus validates the Type ID args when the state cell is created. **Nothing
+validates the AccountLock args**, because a lock script runs only when its cell
+is consumed. Args naming the wrong account produce cells that broadcast
+cleanly, look correct in an explorer, and can never be unlocked.
+
+`assertCreationConsistency` therefore runs last, against the transaction as it
+will actually be broadcast, and checks that the Type ID args match
+`hashTypeId(inputs[0], 0)`, that both account cells carry
+`0x01 || <this transaction's account id>` under `data2`, that the state data is
+the exported bytes, and that fee change returned to the deployer rather than
+becoming an unplanned account cell.
+
 ## Cell locks and reclaiming capacity
 
 Published cells carry the deployer's own lock, so the capacity is reclaimable by

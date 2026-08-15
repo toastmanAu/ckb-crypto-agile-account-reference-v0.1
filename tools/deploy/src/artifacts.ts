@@ -40,6 +40,45 @@ export function ckbDataHash(data: Uint8Array): string {
 }
 
 /**
+ * Minimum capacity, in shannons, for a cell.
+ *
+ * A cell occupies its capacity field, its lock script, its type script if it
+ * has one, and its data. Underfunding any of these is rejected on chain as
+ * InsufficientCellCapacity.
+ */
+export function cellCapacityShannons(cell: {
+  lockArgsLength: number;
+  typeArgsLength: number | null;
+  dataLength: number;
+}): bigint {
+  const { lockArgsLength, typeArgsLength, dataLength } = cell;
+  for (const [label, value] of [
+    ["lock args length", lockArgsLength],
+    ["data length", dataLength],
+  ] as const) {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`invalid ${label}: ${value}`);
+    }
+  }
+  if (
+    typeArgsLength !== null &&
+    (!Number.isInteger(typeArgsLength) || typeArgsLength < 0)
+  ) {
+    throw new Error(`invalid type args length: ${typeArgsLength}`);
+  }
+
+  const typeBytes =
+    typeArgsLength === null ? 0 : SCRIPT_FIXED_BYTES + typeArgsLength;
+  const occupiedBytes =
+    CAPACITY_FIELD_BYTES +
+    SCRIPT_FIXED_BYTES +
+    lockArgsLength +
+    typeBytes +
+    dataLength;
+  return BigInt(occupiedBytes) * SHANNONS_PER_CKB;
+}
+
+/**
  * Minimum capacity, in shannons, for a code cell holding `dataLength` bytes
  * under a lock with `lockArgsLength` bytes of args and no type script.
  */
@@ -47,15 +86,11 @@ export function codeCellCapacityShannons(
   dataLength: number,
   lockArgsLength: number,
 ): bigint {
-  if (!Number.isInteger(dataLength) || dataLength < 0) {
-    throw new Error(`invalid data length: ${dataLength}`);
-  }
-  if (!Number.isInteger(lockArgsLength) || lockArgsLength < 0) {
-    throw new Error(`invalid lock args length: ${lockArgsLength}`);
-  }
-  const occupiedBytes =
-    CAPACITY_FIELD_BYTES + SCRIPT_FIXED_BYTES + lockArgsLength + dataLength;
-  return BigInt(occupiedBytes) * SHANNONS_PER_CKB;
+  return cellCapacityShannons({
+    lockArgsLength,
+    typeArgsLength: null,
+    dataLength,
+  });
 }
 
 interface DeploymentManifest {

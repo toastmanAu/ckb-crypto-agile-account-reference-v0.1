@@ -191,6 +191,44 @@ pub fn ckb_hash(data: &[u8]) -> [u8; 32] {
     output
 }
 
+/// CKB's built-in Type ID code hash: ASCII `TYPE_ID`, left-padded to 32 bytes.
+///
+/// Type ID is implemented by consensus rather than by a deployed script, so a
+/// Type ID script needs no cell dep.
+pub const TYPE_ID_CODE_HASH: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x54, 0x59, 0x50,
+    0x45, 0x5f, 0x49, 0x44,
+];
+
+/// Builds the singleton Account State Type ID script for the given args.
+///
+/// The args are `CKB_HASH(first_input_serialized || output_index_le_u64)`,
+/// which cannot be computed until the creating transaction's first input is
+/// fixed.
+pub fn type_id_script(type_id_args: &[u8; 32]) -> packed::Script {
+    packed::Script::new_builder()
+        .code_hash(TYPE_ID_CODE_HASH.pack())
+        .hash_type(packed::Byte::new(1))
+        .args(type_id_args.as_slice().pack())
+        .build()
+}
+
+/// The account's identity: the script hash of its Type ID script.
+pub fn account_id_from_type_id_args(type_id_args: &[u8; 32]) -> [u8; 32] {
+    type_id_script(type_id_args).calc_script_hash().unpack()
+}
+
+/// AccountLock args, which are exactly `0x01 || account_id`.
+///
+/// Every asset and state cell of the account carries these args, and they never
+/// change when authenticators or verifiers rotate.
+pub fn account_lock_args(account_id: &[u8; 32]) -> [u8; ACCOUNT_LOCK_ARGS_LEN] {
+    let mut args = [0u8; ACCOUNT_LOCK_ARGS_LEN];
+    args[0] = ACCOUNT_LOCK_VERSION;
+    args[1..].copy_from_slice(account_id);
+    args
+}
+
 pub fn authorization_digest(
     operation: u8,
     account_id: &[u8; 32],
