@@ -1,5 +1,7 @@
 //! Host-side, consensus-byte-exact construction and hashing helpers.
 
+pub mod config;
+
 use ckb_account_protocol::*;
 use ckb_hash::new_blake2b;
 use ckb_types::{bytes::Bytes, packed, prelude::*, H256};
