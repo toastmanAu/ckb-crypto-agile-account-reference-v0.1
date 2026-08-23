@@ -165,6 +165,7 @@ fn main() {
             "account_id": hex(account_id),
         },
         "state": hex(&state),
+        "state_hash": hex(ckb_hash(&state)),
         "p256_proof": hex(&p256_proof),
         "account_witness": hex(&account_witness),
         "packed_witness_args": hex(&packed_witness_args),
