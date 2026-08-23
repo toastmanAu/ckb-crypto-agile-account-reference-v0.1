@@ -142,7 +142,8 @@ fn main() {
         .as_bytes();
     packed::WitnessArgs::from_slice(&packed_witness_args).expect("packed WitnessArgs");
     assert_eq!(
-        group_sighash(&tx_hash, &[packed_witness_args.clone()], &[]).expect("final sighash"),
+        group_sighash(&tx_hash, std::slice::from_ref(&packed_witness_args), &[])
+            .expect("final sighash"),
         group_hash,
     );
     assert_eq!(
