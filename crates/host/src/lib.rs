@@ -166,6 +166,38 @@ pub fn encode_verifier_request(
     Ok(out)
 }
 
+/// Encodes the strict WebAuthn ES256 proof consumed by `verifier-p256`.
+pub fn encode_p256_proof(
+    public_key: &[u8],
+    origin: &[u8],
+    authenticator_data: &[u8],
+    client_data_json: &[u8],
+    signature: &[u8],
+) -> Result<Vec<u8>, ProtocolError> {
+    if public_key.len() != 65
+        || public_key[0] != 0x04
+        || origin.is_empty()
+        || origin.len() > usize::from(u8::MAX)
+        || authenticator_data.len() < 37
+        || client_data_json.is_empty()
+        || signature.is_empty()
+    {
+        return Err(ProtocolError::InvalidProof);
+    }
+
+    let mut out = Vec::new();
+    out.extend_from_slice(public_key);
+    out.push(origin.len() as u8);
+    out.extend_from_slice(origin);
+    out.extend_from_slice(&u16_len(authenticator_data.len())?.to_le_bytes());
+    out.extend_from_slice(authenticator_data);
+    out.extend_from_slice(&u16_len(client_data_json.len())?.to_le_bytes());
+    out.extend_from_slice(client_data_json);
+    out.extend_from_slice(&u16_len(signature.len())?.to_le_bytes());
+    out.extend_from_slice(signature);
+    Ok(out)
+}
+
 pub fn encode_public_key_proof(
     public_key: &[u8],
     signature: &[u8],
