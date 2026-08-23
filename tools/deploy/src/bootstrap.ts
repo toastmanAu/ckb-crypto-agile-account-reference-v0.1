@@ -12,7 +12,7 @@
  *   npm run bootstrap -- --state /tmp/account-state.bin
  *   CKB_PRIVKEY=0x... npm run bootstrap -- --state /tmp/account-state.bin --broadcast
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,19 +20,14 @@ import { ccc } from "@ckb-ccc/core";
 
 import { cellCapacityShannons, readLocalArtifactIdentities } from "./artifacts.js";
 import {
-  accountLockScript,
-  assertCreationConsistency,
-  typeIdScript,
-} from "./account.js";
+  bootstrapAccount,
+  writeJsonAtomicFile,
+} from "./bootstrap-lib.js";
 import { formatCkb } from "./plan.js";
 
-const FEE_RATE = 1200n;
 const SHANNONS_PER_CKB = 100_000_000n;
 const ACCOUNT_LOCK_ARGS_LENGTH = 33;
 const TYPE_ID_ARGS_LENGTH = 32;
-
-/** Same length as the real values, so patching them cannot shift capacity. */
-const PLACEHOLDER_32 = `0x${"00".repeat(32)}`;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -93,6 +88,11 @@ function resolveAccountLockCodeHash(): { codeHash: string; deployed: boolean } {
   return { codeHash: identity.dataHash, deployed: false };
 }
 
+function readJsonOrNull(path: string): unknown {
+  if (!existsSync(path)) return null;
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
 
@@ -100,7 +100,6 @@ async function main(): Promise<void> {
   if (stateData.length === 0) {
     throw new Error(`${options.statePath} is empty`);
   }
-  const stateHex = ccc.hexFrom(stateData);
 
   const { codeHash: accountLockCodeHash, deployed } = resolveAccountLockCodeHash();
 
@@ -151,70 +150,21 @@ async function main(): Promise<void> {
   const client = new ccc.ClientPublicTestnet();
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   console.log(`Creating from ${await signer.getRecommendedAddress()}\n`);
-
-  // Both the Type ID args and the AccountLock args depend on the first input,
-  // which does not exist until inputs are collected. Placeholders are the exact
-  // length of the real values so patching cannot change any cell's size.
-  const tx = ccc.Transaction.from({
-    outputs: [
-      {
-        lock: accountLockScript(accountLockCodeHash, PLACEHOLDER_32),
-        type: typeIdScript(PLACEHOLDER_32),
-        capacity: stateCapacity,
-      },
-      {
-        lock: accountLockScript(accountLockCodeHash, PLACEHOLDER_32),
-        capacity: assetCapacity,
-      },
-    ],
-    outputsData: [stateHex, "0x"],
-  });
-
-  await tx.completeInputsByCapacity(signer);
-
-  const typeIdArgs = ccc.hashTypeId(tx.inputs[0], 0);
-  tx.outputs[0].type = typeIdScript(typeIdArgs);
-  const accountId = tx.outputs[0].type.hash();
-  tx.outputs[0].lock = accountLockScript(accountLockCodeHash, accountId);
-  tx.outputs[1].lock = accountLockScript(accountLockCodeHash, accountId);
-
-  await tx.completeFeeBy(signer, FEE_RATE);
-
-  // Runs last, so it sees the transaction exactly as it will be broadcast —
-  // including any inputs or change outputs fee completion added.
-  assertCreationConsistency(tx, accountLockCodeHash, stateHex);
-
-  console.log(`  account id ${accountId}`);
-  console.log(`  lock args  ${tx.outputs[0].lock.args}`);
-
-  const txHash = await signer.sendTransaction(tx);
-  console.log(`  submitted  ${txHash}`);
-  await client.waitTransaction(txHash, 0, 300_000);
-  console.log(`  committed`);
-
-  const outputPath = resolve(repoRoot, "deploy/testnet-account.json");
-  writeFileSync(
-    outputPath,
-    `${JSON.stringify(
-      {
-        schema_version: 1,
-        network: "testnet",
-        account_id: accountId,
-        account_lock: {
-          code_hash: accountLockCodeHash,
-          hash_type: "data2",
-          args: tx.outputs[0].lock.args,
-        },
-        type_id_args: typeIdArgs,
-        state_out_point: { tx_hash: txHash, index: 0 },
-        asset_out_point: { tx_hash: txHash, index: 1 },
-        state_bytes: stateData.length,
-      },
-      null,
-      2,
-    )}\n`,
+  const manifest = await bootstrapAccount(
+    { stateData, assetCapacityCkb: options.assetCapacityCkb },
+    {
+      repoRoot,
+      client,
+      signer,
+      readJson: readJsonOrNull,
+      writeJsonAtomic: writeJsonAtomicFile,
+    },
   );
-  console.log(`\nWrote ${outputPath}`);
+
+  console.log(`  account id ${manifest.account_id}`);
+  console.log(`  lock args  ${manifest.account_lock.args}`);
+  console.log(`  committed  ${manifest.state_out_point.tx_hash}`);
+  console.log(`\nWrote ${resolve(repoRoot, "deploy/testnet-account.json")}`);
 }
 
 main().catch((error) => {
