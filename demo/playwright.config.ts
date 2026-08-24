@@ -15,7 +15,7 @@ export default defineConfig({
   },
   webServer: {
     command: realTestnetEnabled ? "npm run dev" : "npm run dev:fixture",
-    url: "http://localhost:5173",
+    url: "http://localhost:5173/api/status",
     reuseExistingServer: false,
   },
 });
