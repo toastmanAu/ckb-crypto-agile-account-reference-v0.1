@@ -39,7 +39,7 @@ CKB-VM. Host-only signature checks are not counted as protocol conformance.
 | SLH-DSA SHA2-128s profile | Verified inside CKB-VM |
 | Type ID creation, update, and deletion rejection | VM-tested |
 | Migration, verifier upgrade, and delayed recovery | Chained VM story |
-| Testnet deployment | Not published |
+| P-256 demo testnet deployment | Published and on-chain data reverified |
 | Independent audit | Not performed |
 
 The normative requirements are in
@@ -169,6 +169,17 @@ The complete local gate is:
 ./scripts/check.sh
 ```
 
+The local Chromium passkey demo has its own deterministic, no-broadcast gate:
+
+```sh
+npm --prefix demo run check
+```
+
+Setup, testnet capacity, secure key handling, explorer checks, and recovery are
+documented in the [demo operator guide](demo/README.md). Its opt-in
+`npm run test:testnet` command is the repository's only automated real-chain
+browser entry and is not part of routine verification.
+
 Its constituent commands are:
 
 ```sh
@@ -265,9 +276,12 @@ can vary slightly. See [CYCLES.md](CYCLES.md) for measurement details.
 | ML-DSA-65 verifier | `0xc4c5b585443a9543e70eb7228cc3a3cacd2ce3a46f4d57523c612c94d210d0b6` |
 | SLH-DSA verifier | `0xb0c29ae45ff35bd831d59b38d0417d030be43b7a8be6ec90036005636157cd92` |
 
-These hashes identify the pinned local release ELFs; they are not deployment
-outpoints. See [deploy/reference-deployments.json](deploy/reference-deployments.json)
-and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+These hashes identify the pinned local release ELFs. The AccountLock and P-256
+hashes also match the limited testnet demo deployment recorded in
+[deploy/testnet-deployments.json](deploy/testnet-deployments.json); the ML-DSA
+and SLH-DSA artifacts are not claimed as published. See
+[deploy/reference-deployments.json](deploy/reference-deployments.json) and
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Integrating AccountLock
 
@@ -294,7 +308,12 @@ under `schemas/` and `docs/`.
 
 ## Deployment
 
-This repository has no claimed testnet or mainnet deployment. Before publishing:
+The repository claims only the two immutable `data2` code cells used by the
+P-256 browser demo. Their outpoints and post-commit data-hash verification are
+recorded in [deploy/testnet-deployments.json](deploy/testnet-deployments.json).
+There is no claimed mainnet, ML-DSA, or SLH-DSA deployment.
+
+Before publishing any additional artifact:
 
 1. Reproduce the release ELFs with the pinned toolchain and locked dependencies.
 2. Verify their CKB data hashes against the deployment manifest.

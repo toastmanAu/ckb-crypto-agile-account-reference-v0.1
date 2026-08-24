@@ -10,7 +10,10 @@ const root = document.getElementById("root");
 if (root === null) {
   throw new Error("Application root is missing");
 }
-const chainClient = new ccc.ClientPublicTestnet();
+const fixtureRpcUrl = import.meta.env.VITE_CKB_RPC_URL as string | undefined;
+const chainClient = new ccc.ClientPublicTestnet(
+  fixtureRpcUrl === undefined ? undefined : { url: fixtureRpcUrl, fallbacks: [] },
+);
 
 createRoot(root).render(
   <StrictMode>

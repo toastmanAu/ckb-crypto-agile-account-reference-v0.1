@@ -468,7 +468,8 @@ export async function submitSpend(
 }
 
 function isConfirmationTimeout(error: unknown): boolean {
-  return error instanceof Error && error.name === "ErrorClientWaitTransactionTimeout";
+  return error instanceof ccc.ErrorClientWaitTransactionTimeout ||
+    (error instanceof Error && error.name === "ErrorClientWaitTransactionTimeout");
 }
 
 export async function confirmSpend(

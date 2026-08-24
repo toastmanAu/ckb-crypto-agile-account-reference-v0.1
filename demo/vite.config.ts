@@ -1,10 +1,43 @@
 import { fileURLToPath } from "node:url";
+import { relative } from "node:path";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+import { CLIENT_ORIGIN } from "./src/shared/constants.js";
+
+function publicModuleId(moduleId: string): string {
+  const normalized = moduleId.replaceAll("\\", "/");
+  if (normalized.startsWith("\0")) return normalized;
+  const withoutQuery = normalized.split("?", 1)[0]!;
+  const local = relative(process.cwd(), withoutQuery).replaceAll("\\", "/");
+  return local.startsWith("../") ? withoutQuery : local;
+}
+
+function clientModuleEvidence(): Plugin {
+  return {
+    name: "client-module-evidence",
+    apply: "build",
+    generateBundle(_outputOptions, bundle) {
+      const chunks = Object.values(bundle)
+        .filter((entry) => entry.type === "chunk")
+        .map((chunk) => ({
+          fileName: chunk.fileName,
+          isEntry: chunk.isEntry,
+          modules: Object.keys(chunk.modules).map(publicModuleId).sort(),
+        }))
+        .sort((left, right) => left.fileName.localeCompare(right.fileName));
+      this.emitFile({
+        type: "asset",
+        fileName: ".vite/client-modules.json",
+        source: `${JSON.stringify({ version: 1, chunks }, null, 2)}\n`,
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), clientModuleEvidence()],
   resolve: {
     alias: {
       "@ckb-ccc/core": fileURLToPath(
@@ -31,9 +64,19 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8787",
+        target: process.env.CKB_PASSKEY_BROWSER_FIXTURE === "1"
+          ? "http://127.0.0.1:8790"
+          : "http://127.0.0.1:8787",
         changeOrigin: true,
+        headers: { Origin: CLIENT_ORIGIN },
       },
+      ...(process.env.CKB_PASSKEY_BROWSER_FIXTURE === "1" ? {
+        "/__test__": {
+          target: "http://127.0.0.1:8790",
+          changeOrigin: true,
+          headers: { Origin: CLIENT_ORIGIN },
+        },
+      } : {}),
     },
   },
 });

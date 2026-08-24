@@ -1,4 +1,4 @@
-import vectorJson from "../../../vectors/frontend-v1.json";
+import vectorJson from "../../../vectors/frontend-v1.json" with { type: "json" };
 
 export interface FrontendVector {
   schema_version: 1;

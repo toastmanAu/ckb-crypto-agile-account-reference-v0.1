@@ -323,9 +323,7 @@ describe("submission and confirmation receipts", () => {
 
   it("preserves the submitted hash on confirmation timeout without resubmitting", async () => {
     const txHash = `0x${"bb".repeat(32)}`;
-    const timeout = Object.assign(new Error("timeout"), {
-      name: "ErrorClientWaitTransactionTimeout",
-    });
+    const timeout = new ccc.ErrorClientWaitTransactionTimeout(300_000);
     const client = {
       sendTransaction: vi.fn(),
       waitTransaction: vi.fn(async () => { throw timeout; }),
