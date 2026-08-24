@@ -315,7 +315,7 @@ describe("submission and confirmation receipts", () => {
     const submitted = await submitSpend(client, tx);
     const committed = await confirmSpend(client, submitted);
 
-    expect(client.sendTransaction).toHaveBeenCalledTimes(1);
+    expect(client.sendTransaction).toHaveBeenCalledWith(tx, "passthrough");
     expect(client.waitTransaction).toHaveBeenCalledWith(txHash, 0, 300_000);
     expect(client.getCellLive).toHaveBeenCalledWith({ txHash, index: 1 }, true, true);
     expect(committed).toMatchObject({ status: "committed", txHash });

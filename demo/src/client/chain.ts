@@ -56,7 +56,10 @@ export interface SpendClient {
     order?: "asc" | "desc",
     limit?: number,
   ): AsyncGenerator<ccc.Cell>;
-  sendTransaction(transaction: ccc.TransactionLike): Promise<`0x${string}`>;
+  sendTransaction(
+    transaction: ccc.TransactionLike,
+    validator?: ccc.OutputsValidator,
+  ): Promise<`0x${string}`>;
   waitTransaction(
     txHash: ccc.HexLike,
     confirmations?: number,
@@ -458,7 +461,7 @@ export async function submitSpend(
   if (transaction.outputs.length !== 2 || transaction.outputsData.length !== 2) {
     throw new TypeError("Spend transaction has an unexpected output shape");
   }
-  const txHash = await client.sendTransaction(transaction);
+  const txHash = await client.sendTransaction(transaction, "passthrough");
   return SubmittedReceiptSchema.parse({
     status: "submitted",
     txHash,
