@@ -4,7 +4,7 @@ import { relative } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
-import { CLIENT_ORIGIN } from "./src/shared/constants.js";
+import { API_ORIGIN, CLIENT_ORIGIN } from "./src/shared/constants.js";
 
 function publicModuleId(moduleId: string): string {
   const normalized = moduleId.replaceAll("\\", "/");
@@ -64,15 +64,13 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: process.env.CKB_PASSKEY_BROWSER_FIXTURE === "1"
-          ? "http://127.0.0.1:8790"
-          : "http://127.0.0.1:8787",
+        target: API_ORIGIN,
         changeOrigin: true,
         headers: { Origin: CLIENT_ORIGIN },
       },
       ...(process.env.CKB_PASSKEY_BROWSER_FIXTURE === "1" ? {
         "/__test__": {
-          target: "http://127.0.0.1:8790",
+          target: API_ORIGIN,
           changeOrigin: true,
           headers: { Origin: CLIENT_ORIGIN },
         },

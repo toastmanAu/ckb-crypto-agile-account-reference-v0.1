@@ -17,7 +17,7 @@ creation; the passkey assertion authorizes the AccountLock spend in Chromium.
 - Chromium installed for the browser tests (`npx playwright install chromium`)
 - a CKB **testnet-only** private key whose address has at least 517 CKB plus
   ordinary transaction fees
-- ports `127.0.0.1:5173` and `127.0.0.1:8787` available
+- ports `127.0.0.1:5173` and `127.0.0.1:8790` available
 - a Chromium profile whose platform authenticator/passkey support is enabled
 
 The bootstrap plan for the deterministic 177-byte AccountState is:
@@ -56,7 +56,7 @@ unset CKB_PRIVKEY
 ```
 
 Open `http://localhost:5173` in Chromium. `npm run dev` starts the API on
-`127.0.0.1:8787` and Vite on `127.0.0.1:5173`. Stop both with `Ctrl-C`, then run
+`127.0.0.1:8790` and Vite on `127.0.0.1:5173`. Stop both with `Ctrl-C`, then run
 `unset CKB_PRIVKEY` in the same shell even if startup or the browser flow
 failed. Closing the browser does not remove an exported shell variable.
 

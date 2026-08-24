@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { createHttpServer } from "../../src/server/http.js";
 import type { DemoService } from "../../src/server/service.js";
-import { CLIENT_ORIGIN } from "../../src/shared/constants.js";
+import { API_PORT, CLIENT_ORIGIN } from "../../src/shared/constants.js";
 import type { AccountManifest, BootstrapRequest, DemoStatus } from "../../src/shared/schemas.js";
 
 interface ResponseData {
@@ -67,7 +67,7 @@ function call(
         path,
         method: options.method ?? "GET",
         headers: {
-          Host: options.host ?? "127.0.0.1:8787",
+          Host: options.host ?? `127.0.0.1:${API_PORT}`,
           Origin: options.origin ?? CLIENT_ORIGIN,
           ...(options.contentType ? { "Content-Type": options.contentType } : {}),
           ...(body === undefined ? {} : { "Content-Length": Buffer.byteLength(body) }),
@@ -150,7 +150,7 @@ describe("localhost HTTP boundary", () => {
         },
       }),
       async (port) => {
-        expect((await call(port, "/api/status", { host: "localhost:8787" })).status).toBe(403);
+        expect((await call(port, "/api/status", { host: `localhost:${API_PORT}` })).status).toBe(403);
         expect(
           (await call(port, "/api/status", { origin: "https://evil.example" })).status,
         ).toBe(403);

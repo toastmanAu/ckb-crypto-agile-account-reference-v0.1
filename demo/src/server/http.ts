@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { CLIENT_ORIGIN } from "../shared/constants.js";
+import { API_PORT, CLIENT_ORIGIN } from "../shared/constants.js";
 import { BootstrapRequestSchema } from "../shared/schemas.js";
 import { ApiError, toSafeErrorBody } from "./errors.js";
 import type { DemoService } from "./service.js";
 
-const REQUIRED_HOST = "127.0.0.1:8787";
+const REQUIRED_HOST = `127.0.0.1:${API_PORT}`;
 const BODY_LIMIT = 16 * 1024;
 
 function setJsonHeaders(response: ServerResponse, allowOrigin: boolean): void {

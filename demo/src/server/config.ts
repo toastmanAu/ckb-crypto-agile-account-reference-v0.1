@@ -1,9 +1,9 @@
-import { CLIENT_ORIGIN, RP_ID } from "../shared/constants.js";
+import { API_PORT, CLIENT_ORIGIN, RP_ID } from "../shared/constants.js";
 import { ApiError } from "./errors.js";
 
 export interface ServerConfig {
   readonly host: "127.0.0.1";
-  readonly port: 8787;
+  readonly port: typeof API_PORT;
   readonly clientOrigin: typeof CLIENT_ORIGIN;
   readonly rpId: typeof RP_ID;
   readonly network: "testnet";
@@ -18,7 +18,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv): ServerConfig {
 
   const config = {
     host: "127.0.0.1",
-    port: 8787,
+    port: API_PORT,
     clientOrigin: CLIENT_ORIGIN,
     rpId: RP_ID,
     network: "testnet",

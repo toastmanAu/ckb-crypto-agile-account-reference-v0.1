@@ -35,7 +35,7 @@ describe("loadServerConfig", () => {
     const config = loadServerConfig({ CKB_PRIVKEY: PRIVATE_KEY });
 
     expect(config.host).toBe("127.0.0.1");
-    expect(config.port).toBe(8787);
+    expect(config.port).toBe(8790);
     expect(config.clientOrigin).toBe(CLIENT_ORIGIN);
     expect(config.rpId).toBe(RP_ID);
     expect(config.network).toBe("testnet");

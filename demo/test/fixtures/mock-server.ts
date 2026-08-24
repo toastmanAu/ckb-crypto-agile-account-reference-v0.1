@@ -5,7 +5,7 @@ import { ccc } from "@ckb-ccc/core";
 import { z } from "zod";
 
 import { bytesFromHex, hexFromBytes } from "../../src/shared/bytes.js";
-import { CLIENT_ORIGIN } from "../../src/shared/constants.js";
+import { API_PORT, CLIENT_ORIGIN } from "../../src/shared/constants.js";
 import {
   TYPE_ID_CODE_HASH,
   validateAccount,
@@ -21,7 +21,7 @@ import {
 import { frontendVector } from "./frontend-v1.js";
 
 const HOST = "127.0.0.1";
-const PORT = 8790;
+const PORT = API_PORT;
 const CONTROL_TOKEN = "ckb-passkey-demo";
 const FixtureControlSchema = z.object({
   confirmation: z.enum(["committed", "timeout"]).optional(),
