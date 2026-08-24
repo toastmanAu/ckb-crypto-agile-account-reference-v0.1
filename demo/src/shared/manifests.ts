@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import { CellDep, Script } from "@ckb-ccc/core";
 
 import {
   AccountManifestSchema,
@@ -12,18 +12,18 @@ export const TYPE_ID_CODE_HASH =
 
 export interface VerifiedDeployment {
   manifest: DeploymentManifest;
-  accountLockCode: ccc.Script;
-  verifierP256Code: ccc.Script;
-  accountLockDep: ccc.CellDep;
-  verifierP256Dep: ccc.CellDep;
+  accountLockCode: Script;
+  verifierP256Code: Script;
+  accountLockDep: CellDep;
+  verifierP256Dep: CellDep;
 }
 
 export interface VerifiedAccount {
   manifest: AccountManifest;
   deployment: VerifiedDeployment;
-  accountLock: ccc.Script;
-  stateType: ccc.Script;
-  stateDep: ccc.CellDep;
+  accountLock: Script;
+  stateType: Script;
+  stateDep: CellDep;
 }
 
 function invalidManifest(label: string): TypeError {
@@ -36,24 +36,24 @@ export function validateDeployment(value: unknown): VerifiedDeployment {
     throw invalidManifest("Deployment");
   }
   const manifest = result.data;
-  const accountLockCode = ccc.Script.from({
+  const accountLockCode = Script.from({
     codeHash: manifest.artifacts.account_lock.dataHash,
     hashType: manifest.artifacts.account_lock.hashType,
     args: "0x",
   });
-  const verifierP256Code = ccc.Script.from({
+  const verifierP256Code = Script.from({
     codeHash: manifest.artifacts.verifier_p256.dataHash,
     hashType: manifest.artifacts.verifier_p256.hashType,
     args: "0x",
   });
-  const accountLockDep = ccc.CellDep.from({
+  const accountLockDep = CellDep.from({
     outPoint: {
       txHash: manifest.artifacts.account_lock.txHash,
       index: manifest.artifacts.account_lock.index,
     },
     depType: "code",
   });
-  const verifierP256Dep = ccc.CellDep.from({
+  const verifierP256Dep = CellDep.from({
     outPoint: {
       txHash: manifest.artifacts.verifier_p256.txHash,
       index: manifest.artifacts.verifier_p256.index,
@@ -89,7 +89,7 @@ export function validateAccount(
     throw new TypeError("Account manifest has invalid bootstrap outpoints");
   }
 
-  const accountLock = ccc.Script.from({
+  const accountLock = Script.from({
     codeHash: manifest.account_lock.code_hash,
     hashType: manifest.account_lock.hash_type,
     args: manifest.account_lock.args,
@@ -98,7 +98,7 @@ export function validateAccount(
   if (accountLock.args !== expectedArgs) {
     throw new TypeError("AccountLock args do not bind the account ID");
   }
-  const stateType = ccc.Script.from({
+  const stateType = Script.from({
     codeHash: TYPE_ID_CODE_HASH,
     hashType: "type",
     args: manifest.type_id_args,
@@ -106,7 +106,7 @@ export function validateAccount(
   if (stateType.hash() !== manifest.account_id) {
     throw new TypeError("Type ID script hash does not match the account ID");
   }
-  const stateDep = ccc.CellDep.from({
+  const stateDep = CellDep.from({
     outPoint: {
       txHash: manifest.state_out_point.tx_hash,
       index: manifest.state_out_point.index,
