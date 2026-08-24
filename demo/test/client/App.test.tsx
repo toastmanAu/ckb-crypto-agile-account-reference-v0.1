@@ -1,10 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
+import { ccc } from "@ckb-ccc/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/client/App.js";
 import type { DemoApi } from "../../src/client/api.js";
+import type { PreparedSpend, SpendClient } from "../../src/client/chain.js";
+import type { SpendStepOperations } from "../../src/client/components/SpendStep.js";
 import type { registerPasskey } from "../../src/client/passkey.js";
 import { PASSKEY_STORAGE_KEY } from "../../src/client/storage.js";
 import type {
@@ -12,6 +15,7 @@ import type {
   DemoStatus,
   DeploymentManifest,
   PasskeyRecord,
+  SubmittedReceipt,
   TransactionReceipt,
 } from "../../src/shared/schemas.js";
 
@@ -75,6 +79,73 @@ const passkey: PasskeyRecord = {
   origin: "http://localhost:5173",
   createdAt: "2026-08-24T00:00:00.000Z",
 };
+const spendClient = {} as SpendClient;
+const spendTxHash = `0x${"aa".repeat(32)}` as const;
+const submittedReceipt: SubmittedReceipt = {
+  status: "submitted",
+  txHash: spendTxHash,
+  explorerUrl: `https://pudge.explorer.nervos.org/transaction/${spendTxHash}`,
+  remainingCapacityShannons: "9999900000",
+};
+
+function preparedSpend(): PreparedSpend {
+  const lock = {
+    codeHash: `0x${"11".repeat(32)}`,
+    hashType: "type" as const,
+    args: `0x${"22".repeat(20)}`,
+  };
+  return {
+    transaction: ccc.Transaction.from({
+      inputs: [{ previousOutput: { txHash: `0x${"44".repeat(32)}`, index: 1 } }],
+      outputs: [
+        { capacity: 10_000_000_000n, lock },
+        { capacity: 9_999_900_000n, lock },
+      ],
+      outputsData: ["0x", "0x"],
+      witnesses: ["0x"],
+    }),
+    authorizationDigest: new Uint8Array(32),
+    review: {
+      inputCapacityShannons: "20000000000",
+      transferCapacityShannons: "10000000000",
+      changeCapacityShannons: "9999900000",
+      feeShannons: "100000",
+      funderAddress: status.funderAddress,
+      inputOutPoint: { txHash: account.asset_out_point.tx_hash, index: 1 },
+      dependencies: [
+        { name: "account_lock", txHash: deployment.artifacts.account_lock.txHash, index: 0 },
+        { name: "verifier_p256", txHash: deployment.artifacts.verifier_p256.txHash, index: 0 },
+        { name: "account_state", txHash: account.state_out_point.tx_hash, index: 0 },
+      ],
+    },
+    maxWitnessBytes: 4096,
+    sequence: 0n,
+    credentialId: passkey.credentialId,
+    publicKey: passkey.publicKey,
+    accountId: account.account_id,
+    stateData: "0x00",
+  };
+}
+
+function spendOperations(
+  confirm: SpendStepOperations["confirm"] = vi.fn().mockResolvedValue({
+    ...submittedReceipt,
+    status: "committed",
+  }),
+): SpendStepOperations {
+  return {
+    prepare: vi.fn().mockResolvedValue(preparedSpend()),
+    requestAssertion: vi.fn().mockResolvedValue({
+      credentialId: passkey.credentialId,
+      authenticatorData: new Uint8Array(37),
+      clientDataJson: new TextEncoder().encode("{}"),
+      signature: Uint8Array.of(0x30, 0x06, 0x02, 0x01, 1, 0x02, 0x01, 1),
+    }),
+    finalize: vi.fn((prepared) => prepared.transaction.clone()),
+    submit: vi.fn().mockResolvedValue(submittedReceipt),
+    confirm,
+  };
+}
 
 function api(currentStatus: DemoStatus, currentAccount: AccountManifest | null): DemoApi {
   return {
@@ -163,6 +234,8 @@ describe("passkey demo wizard shell", () => {
       <App
         api={api({ ...status, account }, account)}
         storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={spendOperations()}
       />,
     );
     expect(await screen.findByRole("button", { name: "Authorize 100 CKB spend" })).toBeEnabled();
@@ -214,6 +287,8 @@ describe("passkey demo wizard shell", () => {
       <App
         api={readyApi}
         storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={spendOperations()}
         receipt={{ ...receipt, status: "confirmation_timeout" } as TransactionReceipt}
       />,
     );
@@ -225,10 +300,31 @@ describe("passkey demo wizard shell", () => {
       <App
         api={readyApi}
         storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={spendOperations()}
         receipt={{ ...receipt, status: "committed" } as TransactionReceipt}
       />,
     );
     expect(await screen.findByRole("heading", { name: "Spend committed" })).toBeVisible();
+  });
+
+  it("lets a recheck advance a hydrated timeout receipt to committed", async () => {
+    storePasskey();
+    const operations = spendOperations();
+    render(
+      <App
+        api={api({ ...status, account }, account)}
+        storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={operations}
+        receipt={{ ...submittedReceipt, status: "confirmation_timeout" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+
+    expect(await screen.findByRole("heading", { name: "Spend committed" })).toBeVisible();
+    expect(operations.submit).not.toHaveBeenCalled();
   });
 
   it("does not let a receipt hide an authoritative account reconciliation block", async () => {
@@ -237,6 +333,8 @@ describe("passkey demo wizard shell", () => {
       <App
         api={api({ ...status, account: null }, account)}
         storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={spendOperations()}
         receipt={{
           status: "submitted",
           txHash: `0x${"aa".repeat(32)}`,
@@ -248,31 +346,6 @@ describe("passkey demo wizard shell", () => {
 
     expect(await screen.findByRole("heading", { name: "Account access is blocked" })).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent(/server account state changed/i);
-  });
-
-  it("calls only the active stage action and prevents duplicate clicks while it is pending", async () => {
-    storePasskey();
-    let resolveAction: (() => void) | undefined;
-    const action = vi.fn(
-      () => new Promise<void>((resolve) => {
-        resolveAction = resolve;
-      }),
-    );
-    render(
-      <App
-        api={api({ ...status, account }, account)}
-        storage={localStorage}
-        onPrimaryAction={action}
-      />,
-    );
-    const button = await screen.findByRole("button", { name: "Authorize 100 CKB spend" });
-    button.click();
-    button.click();
-
-    expect(action).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(button).toBeDisabled());
-    resolveAction?.();
-    await waitFor(() => expect(button).toBeEnabled());
   });
 
   it("stores a validated registration and advances to account bootstrap", async () => {
@@ -306,7 +379,14 @@ describe("passkey demo wizard shell", () => {
         return account;
       }),
     };
-    render(<App api={integratedApi} storage={localStorage} />);
+    render(
+      <App
+        api={integratedApi}
+        storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={spendOperations()}
+      />,
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "Create testnet account" }));
 
@@ -336,5 +416,83 @@ describe("passkey demo wizard shell", () => {
     expect(await screen.findByRole("heading", { name: "Account access is blocked" })).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent(/server account state changed/i);
     expect(enabledPrimaryActions()).toHaveLength(0);
+  });
+
+  it("moves from the frozen spend review to submitted and then committed receipt states", async () => {
+    storePasskey();
+    let finishConfirmation!: (receipt: TransactionReceipt) => void;
+    const confirmation = new Promise<TransactionReceipt>((resolve) => {
+      finishConfirmation = resolve;
+    });
+    const operations = spendOperations(vi.fn(() => confirmation) as SpendStepOperations["confirm"]);
+    render(
+      <App
+        api={api({ ...status, account }, account)}
+        storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={operations}
+        credentials={{} as CredentialsContainer}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Authorize 100 CKB spend" }));
+
+    expect(await screen.findByRole("heading", { name: "Transaction submitted" })).toBeVisible();
+    expect(screen.getByLabelText(`Transaction hash ${spendTxHash}`)).toBeVisible();
+    expect(operations.submit).toHaveBeenCalledTimes(1);
+    finishConfirmation({ ...submittedReceipt, status: "committed" });
+    expect(await screen.findByRole("heading", { name: "Spend committed" })).toBeVisible();
+  });
+
+  it("rechecks a timed-out hash without submitting another transaction", async () => {
+    storePasskey();
+    const confirm = vi.fn()
+      .mockResolvedValueOnce({ ...submittedReceipt, status: "confirmation_timeout" })
+      .mockResolvedValueOnce({ ...submittedReceipt, status: "committed" });
+    const operations = spendOperations(confirm);
+    render(
+      <App
+        api={api({ ...status, account }, account)}
+        storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={operations}
+        credentials={{} as CredentialsContainer}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Authorize 100 CKB spend" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+
+    expect(await screen.findByRole("heading", { name: "Spend committed" })).toBeVisible();
+    expect(operations.submit).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-fetches authoritative manifests after commitment without hiding the irreversible receipt", async () => {
+    storePasskey();
+    const integratedApi: DemoApi = {
+      status: vi.fn()
+        .mockResolvedValueOnce({ ...status, account })
+        .mockResolvedValueOnce({ ...status, account: null }),
+      account: vi.fn().mockResolvedValue(account),
+      bootstrap: vi.fn(),
+    };
+    render(
+      <App
+        api={integratedApi}
+        storage={localStorage}
+        chainClient={spendClient}
+        spendOperations={spendOperations()}
+        credentials={{} as CredentialsContainer}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Authorize 100 CKB spend" }));
+
+    expect(await screen.findByRole("heading", { name: "Spend committed" })).toBeVisible();
+    expect(screen.getByLabelText(`Transaction hash ${spendTxHash}`)).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(/server account state changed/i);
+    expect(integratedApi.status).toHaveBeenCalledTimes(2);
+    expect(integratedApi.account).toHaveBeenCalledTimes(2);
   });
 });

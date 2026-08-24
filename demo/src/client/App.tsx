@@ -10,8 +10,11 @@ import {
 } from "../shared/schemas.js";
 import type { DemoApi } from "./api.js";
 import { DemoApiError } from "./api.js";
+import type { SpendClient } from "./chain.js";
 import { BootstrapStep } from "./components/BootstrapStep.js";
 import { PasskeyStep } from "./components/PasskeyStep.js";
+import { Receipt } from "./components/Receipt.js";
+import { SpendStep, type SpendStepOperations } from "./components/SpendStep.js";
 import { StatusHeader } from "./components/StatusHeader.js";
 import { passkeyCapabilityProblem, registerPasskey } from "./passkey.js";
 import { loadPasskeyRecord } from "./storage.js";
@@ -55,10 +58,12 @@ export interface AppProps {
   api: DemoApi;
   storage: Storage;
   receipt?: TransactionReceipt | null;
-  onPrimaryAction?: (stage: ActionableState["stage"]) => Promise<void> | void;
   credentials?: CredentialsContainer;
   cryptoProvider?: Crypto;
   register?: typeof registerPasskey;
+  chainClient?: SpendClient;
+  spendOperations?: SpendStepOperations;
+  clipboard?: Pick<Clipboard, "writeText">;
 }
 
 function sameAccount(
@@ -155,29 +160,22 @@ function withReceipt(state: WizardState, receiptValue: TransactionReceipt | null
   };
 }
 
-const stepContent = {
-  "ready-to-spend": {
-    number: "03",
-    heading: "Authorize your first spend",
-    body: "Review a fixed 100 CKB transfer back to the funder, then authorize the exact transaction with your passkey.",
-    action: "Authorize 100 CKB spend",
-  },
-} as const;
-
 export function App({
   api,
   storage,
   receipt,
-  onPrimaryAction,
   credentials = globalThis.navigator.credentials,
   cryptoProvider = globalThis.crypto,
   register = registerPasskey,
+  chainClient,
+  spendOperations,
+  clipboard,
 }: AppProps) {
   const [state, setState] = useState<WizardState>({ stage: "loading" });
-  const [actionPending, setActionPending] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const actionLock = useRef(false);
+  const [internalReceipt, setInternalReceipt] = useState<TransactionReceipt | null>(null);
+  const [postCommitError, setPostCommitError] = useState<string | null>(null);
   const wizardRef = useRef<HTMLElement>(null);
+  const reconciledCommit = useRef<string | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -199,7 +197,10 @@ export function App({
     };
   }, [api, storage]);
 
-  const displayedState = useMemo(() => withReceipt(state, receipt), [state, receipt]);
+  const displayedState = useMemo(
+    () => withReceipt(state, internalReceipt ?? receipt),
+    [internalReceipt, receipt, state],
+  );
 
   useEffect(() => {
     const heading = wizardRef.current?.querySelector<HTMLElement>("h2");
@@ -229,19 +230,43 @@ export function App({
       });
   }
 
-  async function runPrimaryAction(stage: ActionableState["stage"]): Promise<void> {
-    if (actionLock.current) return;
-    actionLock.current = true;
-    setActionPending(true);
-    setActionError(null);
-    try {
-      await onPrimaryAction?.(stage);
-    } catch {
-      setActionError("The action could not be completed. Review the local service and try again.");
-    } finally {
-      actionLock.current = false;
-      setActionPending(false);
+  function handleSpendReceipt(receiptValue: TransactionReceipt): void {
+    const result = TransactionReceiptSchema.safeParse(receiptValue);
+    if (!result.success) {
+      setState({
+        stage: "blocked",
+        heading: "Receipt cannot be reconciled",
+        message: "The transaction receipt is malformed.",
+      });
+      return;
     }
+    const nextReceipt = result.data;
+    setInternalReceipt(nextReceipt);
+    if (
+      nextReceipt.status !== "committed" ||
+      reconciledCommit.current === nextReceipt.txHash ||
+      state.stage !== "ready-to-spend" ||
+      state.passkey === null
+    ) {
+      return;
+    }
+    reconciledCommit.current = nextReceipt.txHash;
+    setPostCommitError(null);
+    const passkey = state.passkey;
+    void Promise.all([api.status(), api.account()])
+      .then(([status, account]) => {
+        const reconciled = reconcile(status, account, passkey);
+        if (reconciled.stage === "blocked") {
+          setPostCommitError(reconciled.message);
+        } else {
+          setState(reconciled);
+        }
+      })
+      .catch(() => {
+        setPostCommitError(
+          "The committed transaction is preserved, but authoritative account state could not be refreshed.",
+        );
+      });
   }
 
   const visibleStatus = "status" in displayedState ? displayedState.status : undefined;
@@ -281,34 +306,31 @@ export function App({
           />
         )}
 
-        {displayedState.stage === "ready-to-spend" && (() => {
-          const content = stepContent[displayedState.stage];
-          return (
-            <section className="step-card" aria-labelledby="active-step-heading">
-              <p className="step-number">STEP {content.number} / 03</p>
-              <h2 id="active-step-heading">{content.heading}</h2>
-              <p className="step-copy">{content.body}</p>
-              {displayedState.passkey !== null && (
-                <dl className="key-summary">
-                  <div>
-                    <dt>Passkey key ID</dt>
-                    <dd>{displayedState.passkey.keyId}</dd>
-                  </div>
-                </dl>
+        {displayedState.stage === "ready-to-spend" &&
+          displayedState.account !== null &&
+          displayedState.passkey !== null &&
+          chainClient !== undefined && (
+            <SpendStep
+              client={chainClient}
+              account={validateAccount(
+                displayedState.account,
+                validateDeployment(displayedState.status.deployment),
               )}
-              {actionError !== null && <p role="alert" className="inline-error">{actionError}</p>}
-              <button
-                type="button"
-                className="primary-action"
-                disabled={actionPending}
-                onClick={() => void runPrimaryAction(displayedState.stage)}
-              >
-                {actionPending ? "Working…" : content.action}
-              </button>
-              <p className="action-note">No mainnet funds. No browser-held CKB private key.</p>
-            </section>
-          );
-        })()}
+              funderAddress={displayedState.status.funderAddress}
+              passkey={displayedState.passkey}
+              credentials={credentials}
+              operations={spendOperations}
+              onReceipt={handleSpendReceipt}
+            />
+          )}
+
+        {displayedState.stage === "ready-to-spend" && chainClient === undefined && (
+          <section className="step-card blocked-card" aria-labelledby="chain-client-heading">
+            <p className="step-number">ACTION REQUIRED</p>
+            <h2 id="chain-client-heading">Public testnet access is unavailable</h2>
+            <p role="alert" className="inline-error">The browser chain client is not configured.</p>
+          </section>
+        )}
 
         {displayedState.stage === "blocked" && (
           <section className="step-card blocked-card" aria-labelledby="blocked-heading">
@@ -321,33 +343,17 @@ export function App({
           </section>
         )}
 
-        {displayedState.stage === "submitted" && (
-          <section className="step-card receipt-card" aria-labelledby="submitted-heading">
-            <p className="step-number">SUBMITTED</p>
-            <h2 id="submitted-heading">Transaction submitted</h2>
-            <p role="status" aria-live="polite" className="inline-status">
-              {displayedState.receipt.status === "confirmation_timeout"
-                ? "Confirmation is taking longer than expected. The transaction hash is preserved and the demo will not resubmit."
-                : "The transaction is in the CKB testnet pool and is waiting for commitment."}
-            </p>
-            <a className="secondary-action" href={displayedState.receipt.explorerUrl} target="_blank" rel="noreferrer">
-              View transaction in explorer
-            </a>
-          </section>
-        )}
-
-        {displayedState.stage === "committed" && (
-          <section className="step-card receipt-card" aria-labelledby="committed-heading">
-            <p className="step-number">COMMITTED</p>
-            <h2 id="committed-heading">Spend committed</h2>
-            <p role="status" aria-live="polite" className="inline-status">
-              The 100 CKB spend is committed and the remaining AccountLock change was verified live.
-            </p>
-            <a className="secondary-action" href={displayedState.receipt.explorerUrl} target="_blank" rel="noreferrer">
-              View committed transaction
-            </a>
-          </section>
-        )}
+        {(displayedState.stage === "submitted" || displayedState.stage === "committed") &&
+          chainClient !== undefined && (
+            <Receipt
+              receipt={displayedState.receipt}
+              client={chainClient}
+              operations={spendOperations === undefined ? undefined : { confirm: spendOperations.confirm }}
+              clipboard={clipboard}
+              reconciliationError={postCommitError}
+              onReceipt={handleSpendReceipt}
+            />
+          )}
       </main>
       <footer>
         <p>Reference implementation · Local browser ceremony · CKB testnet only</p>

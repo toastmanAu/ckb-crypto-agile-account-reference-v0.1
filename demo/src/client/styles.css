@@ -238,13 +238,61 @@ h2 {
   line-height: 1.6;
 }
 
+.dependency-summary {
+  margin-bottom: 32px;
+  padding: 16px;
+  border-radius: 8px;
+  background: hsl(217, 30%, 10%);
+}
+
+.dependency-summary h3,
+.hash-panel p {
+  margin: 0;
+  color: hsl(215, 16%, 61%);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dependency-list {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dependency-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.dependency-list span {
+  color: hsl(210, 24%, 88%);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.dependency-list code,
+.hash-panel code {
+  overflow-wrap: anywhere;
+  color: hsl(215, 17%, 72%);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
 .review-summary dd {
   overflow-wrap: anywhere;
   font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 .primary-action,
-.secondary-action {
+.secondary-action,
+.tertiary-action {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -291,6 +339,42 @@ h2 {
 .secondary-action:hover {
   color: hsl(174, 68%, 82%);
   background: hsl(174, 38%, 14%);
+}
+
+.tertiary-action {
+  border: 0;
+  color: hsl(174, 60%, 72%);
+  background: transparent;
+}
+
+.tertiary-action:hover:not(:disabled) {
+  color: hsl(174, 68%, 82%);
+  background: hsl(174, 38%, 14%);
+}
+
+.tertiary-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hash-panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 32px;
+  padding: 16px;
+  border-radius: 8px;
+  background: hsl(217, 30%, 10%);
+}
+
+.hash-panel .tertiary-action {
+  justify-self: start;
+  margin-top: 8px;
+}
+
+.receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .action-note {
@@ -387,7 +471,8 @@ footer p {
   }
 
   .primary-action,
-  .secondary-action {
+  .secondary-action,
+  .tertiary-action {
     width: 100%;
     min-width: 0;
   }
