@@ -32,6 +32,22 @@ export class PasskeyProtocolError extends Error {
   }
 }
 
+export function passkeyCapabilityProblem(): string | null {
+  if (globalThis.isSecureContext !== true) {
+    return "Passkeys need a secure localhost context and Chromium with WebAuthn support.";
+  }
+  if (typeof globalThis.PublicKeyCredential !== "function") {
+    return "This browser does not provide the PublicKeyCredential API required by the demo.";
+  }
+  if (
+    typeof globalThis.AuthenticatorAttestationResponse !== "function" ||
+    typeof globalThis.AuthenticatorAttestationResponse.prototype.getPublicKey !== "function"
+  ) {
+    return "Chromium cannot export the passkey public key required by this AccountLock demo.";
+  }
+  return null;
+}
+
 function requireWebAuthn(): void {
   if (globalThis.isSecureContext !== true) {
     throw new PasskeyProtocolError("Passkeys require a secure localhost context");

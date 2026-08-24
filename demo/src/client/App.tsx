@@ -10,7 +10,10 @@ import {
 } from "../shared/schemas.js";
 import type { DemoApi } from "./api.js";
 import { DemoApiError } from "./api.js";
+import { BootstrapStep } from "./components/BootstrapStep.js";
+import { PasskeyStep } from "./components/PasskeyStep.js";
 import { StatusHeader } from "./components/StatusHeader.js";
+import { passkeyCapabilityProblem, registerPasskey } from "./passkey.js";
 import { loadPasskeyRecord } from "./storage.js";
 
 export type WizardStage =
@@ -53,22 +56,9 @@ export interface AppProps {
   storage: Storage;
   receipt?: TransactionReceipt | null;
   onPrimaryAction?: (stage: ActionableState["stage"]) => Promise<void> | void;
-}
-
-function passkeyCapabilityProblem(): string | null {
-  if (globalThis.isSecureContext !== true) {
-    return "Passkeys need a secure localhost context and Chromium with WebAuthn support.";
-  }
-  if (typeof globalThis.PublicKeyCredential !== "function") {
-    return "This browser does not provide the PublicKeyCredential API required by the demo.";
-  }
-  if (
-    typeof globalThis.AuthenticatorAttestationResponse !== "function" ||
-    typeof globalThis.AuthenticatorAttestationResponse.prototype.getPublicKey !== "function"
-  ) {
-    return "Chromium cannot export the passkey public key required by this AccountLock demo.";
-  }
-  return null;
+  credentials?: CredentialsContainer;
+  cryptoProvider?: Crypto;
+  register?: typeof registerPasskey;
 }
 
 function sameAccount(
@@ -166,18 +156,6 @@ function withReceipt(state: WizardState, receiptValue: TransactionReceipt | null
 }
 
 const stepContent = {
-  "needs-passkey": {
-    number: "01",
-    heading: "Create your passkey",
-    body: "Create a device-bound P-256 credential. Only its public key and credential ID stay in this browser.",
-    action: "Create passkey",
-  },
-  "needs-account": {
-    number: "02",
-    heading: "Create your testnet account",
-    body: "Use the local funder to publish one AccountState cell and a 200 CKB AccountLock asset for this passkey.",
-    action: "Create testnet account",
-  },
   "ready-to-spend": {
     number: "03",
     heading: "Authorize your first spend",
@@ -186,11 +164,20 @@ const stepContent = {
   },
 } as const;
 
-export function App({ api, storage, receipt, onPrimaryAction }: AppProps) {
+export function App({
+  api,
+  storage,
+  receipt,
+  onPrimaryAction,
+  credentials = globalThis.navigator.credentials,
+  cryptoProvider = globalThis.crypto,
+  register = registerPasskey,
+}: AppProps) {
   const [state, setState] = useState<WizardState>({ stage: "loading" });
   const [actionPending, setActionPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const actionLock = useRef(false);
+  const wizardRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let current = true;
@@ -214,6 +201,34 @@ export function App({ api, storage, receipt, onPrimaryAction }: AppProps) {
 
   const displayedState = useMemo(() => withReceipt(state, receipt), [state, receipt]);
 
+  useEffect(() => {
+    const heading = wizardRef.current?.querySelector<HTMLElement>("h2");
+    if (heading === undefined || heading === null) return;
+    heading.tabIndex = -1;
+    heading.focus();
+  }, [displayedState.stage]);
+
+  function handlePasskeyCreated(passkey: PasskeyRecord): void {
+    if (state.stage !== "needs-passkey") return;
+    setState(reconcile(state.status, state.account, passkey));
+  }
+
+  function handleAccountCreated(): void {
+    if (state.stage !== "needs-account" || state.passkey === null) return;
+    const passkey = state.passkey;
+    void Promise.all([api.status(), api.account()])
+      .then(([status, account]) => {
+        setState(reconcile(status, account, passkey));
+      })
+      .catch((error: unknown) => {
+        setState({
+          stage: "blocked",
+          heading: "Local setup is blocked",
+          message: error instanceof DemoApiError ? error.message : "Local API is unavailable",
+        });
+      });
+  }
+
   async function runPrimaryAction(stage: ActionableState["stage"]): Promise<void> {
     if (actionLock.current) return;
     actionLock.current = true;
@@ -234,7 +249,7 @@ export function App({ api, storage, receipt, onPrimaryAction }: AppProps) {
   return (
     <div className="app-shell">
       <StatusHeader status={visibleStatus} />
-      <main className="wizard" aria-label="Passkey account setup">
+      <main ref={wizardRef} className="wizard" aria-label="Passkey account setup">
         {displayedState.stage === "loading" && (
           <section className="step-card" aria-labelledby="loading-heading">
             <p className="step-number">LOCAL CHECK</p>
@@ -247,9 +262,26 @@ export function App({ api, storage, receipt, onPrimaryAction }: AppProps) {
           </section>
         )}
 
-        {(displayedState.stage === "needs-passkey" ||
-          displayedState.stage === "needs-account" ||
-          displayedState.stage === "ready-to-spend") && (() => {
+        {displayedState.stage === "needs-passkey" && (
+          <PasskeyStep
+            storage={storage}
+            credentials={credentials}
+            cryptoProvider={cryptoProvider}
+            register={register}
+            onCreated={handlePasskeyCreated}
+          />
+        )}
+
+        {displayedState.stage === "needs-account" && displayedState.passkey !== null && (
+          <BootstrapStep
+            api={api}
+            status={displayedState.status}
+            passkey={displayedState.passkey}
+            onCreated={handleAccountCreated}
+          />
+        )}
+
+        {displayedState.stage === "ready-to-spend" && (() => {
           const content = stepContent[displayedState.stage];
           return (
             <section className="step-card" aria-labelledby="active-step-heading">

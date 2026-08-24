@@ -1,10 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/client/App.js";
 import type { DemoApi } from "../../src/client/api.js";
+import type { registerPasskey } from "../../src/client/passkey.js";
 import { PASSKEY_STORAGE_KEY } from "../../src/client/storage.js";
 import type {
   AccountManifest,
@@ -250,6 +251,7 @@ describe("passkey demo wizard shell", () => {
   });
 
   it("calls only the active stage action and prevents duplicate clicks while it is pending", async () => {
+    storePasskey();
     let resolveAction: (() => void) | undefined;
     const action = vi.fn(
       () => new Promise<void>((resolve) => {
@@ -258,12 +260,12 @@ describe("passkey demo wizard shell", () => {
     );
     render(
       <App
-        api={api(status, null)}
+        api={api({ ...status, account }, account)}
         storage={localStorage}
         onPrimaryAction={action}
       />,
     );
-    const button = await screen.findByRole("button", { name: "Create passkey" });
+    const button = await screen.findByRole("button", { name: "Authorize 100 CKB spend" });
     button.click();
     button.click();
 
@@ -271,5 +273,68 @@ describe("passkey demo wizard shell", () => {
     await waitFor(() => expect(button).toBeDisabled());
     resolveAction?.();
     await waitFor(() => expect(button).toBeEnabled());
+  });
+
+  it("stores a validated registration and advances to account bootstrap", async () => {
+    const register = vi.fn<typeof registerPasskey>().mockResolvedValue(passkey);
+    render(
+      <App
+        api={api(status, null)}
+        storage={localStorage}
+        credentials={{} as CredentialsContainer}
+        cryptoProvider={{} as Crypto}
+        register={register}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create passkey" }));
+
+    const accountHeading = await screen.findByRole("heading", { name: "Create your testnet account" });
+    expect(accountHeading).toHaveFocus();
+    expect(JSON.parse(localStorage.getItem(PASSKEY_STORAGE_KEY) ?? "null")).toEqual(passkey);
+    expect(screen.getByText(passkey.keyId)).toBeVisible();
+  });
+
+  it("re-fetches status and account after bootstrap before enabling spend", async () => {
+    storePasskey();
+    let bootstrapped = false;
+    const integratedApi: DemoApi = {
+      status: vi.fn(async () => ({ ...status, account: bootstrapped ? account : null })),
+      account: vi.fn(async () => (bootstrapped ? account : null)),
+      bootstrap: vi.fn(async () => {
+        bootstrapped = true;
+        return account;
+      }),
+    };
+    render(<App api={integratedApi} storage={localStorage} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create testnet account" }));
+
+    const spendHeading = await screen.findByRole("heading", { name: "Authorize your first spend" });
+    expect(spendHeading).toHaveFocus();
+    expect(integratedApi.status).toHaveBeenCalledTimes(2);
+    expect(integratedApi.account).toHaveBeenCalledTimes(2);
+    expect(integratedApi.bootstrap).toHaveBeenCalledWith({
+      credentialId: passkey.credentialId,
+      publicKey: passkey.publicKey,
+    });
+  });
+
+  it("blocks when post-bootstrap authoritative snapshots disagree", async () => {
+    storePasskey();
+    const integratedApi: DemoApi = {
+      status: vi.fn(async () => status),
+      account: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(account),
+      bootstrap: vi.fn().mockResolvedValue(account),
+    };
+    render(<App api={integratedApi} storage={localStorage} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create testnet account" }));
+
+    expect(await screen.findByRole("heading", { name: "Account access is blocked" })).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(/server account state changed/i);
+    expect(enabledPrimaryActions()).toHaveLength(0);
   });
 });
