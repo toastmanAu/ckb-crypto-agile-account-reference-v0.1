@@ -111,7 +111,7 @@ describe("real-testnet recovery state", () => {
     expect(await readFile(paths.recoveryPath, "utf8")).not.toContain("CKB_PRIVKEY");
   });
 
-  it("preserves the prior recovery when replacement fails before atomic rename", async () => {
+  it("preserves the prior recovery when the replacement operation fails", async () => {
     const paths = await tempPaths();
     await saveRecovery(paths, recovery);
     const before = await readFile(paths.recoveryPath, "utf8");
@@ -122,10 +122,10 @@ describe("real-testnet recovery state", () => {
     };
 
     await expect(saveRecovery(paths, replacement, {
-      beforeRename: () => {
-        throw new Error("injected pre-rename failure");
+      replaceTemporary: async () => {
+        throw new Error("injected replacement failure");
       },
-    })).rejects.toThrow("injected pre-rename failure");
+    })).rejects.toThrow("injected replacement failure");
 
     const after = await readFile(paths.recoveryPath, "utf8");
     expect(after).toBe(before);

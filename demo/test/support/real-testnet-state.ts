@@ -97,7 +97,7 @@ export interface ArchiveOptions {
 }
 
 export interface RecoveryWriteOptions {
-  beforeRename?: () => void | Promise<void>;
+  replaceTemporary?: (temporary: string, destination: string) => Promise<void>;
 }
 
 export function recoverySummary(recovery: RecoveryDocument) {
@@ -193,8 +193,7 @@ async function writePrivateJson<T>(
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await options.beforeRename?.();
-    await rename(temporary, path);
+    await (options.replaceTemporary ?? rename)(temporary, path);
     await chmod(path, 0o600);
     const directory = await open(dirname(path), "r");
     try {
