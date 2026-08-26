@@ -15,9 +15,9 @@
     },
     "verifier_p256": {
       "name": "verifier_p256",
-      "dataHash": "0x376a3e1bfefc57d63cff2e5d022283800fb6b5f014b5edac4be573d58a7b124a",
+      "dataHash": "0x1ec48320a3da560d7732d68391ec0046cd18b4990e7ee032e10f78242d4e1083",
       "hashType": "data2",
-      "txHash": "0x7ae56db2c8ecce226a466b5906791d390b6abdba10e135a4b46b695be278d31a",
+      "txHash": "0xc13285b3ed2494c6c1275e48255025d3ab024b18b26e0e92f0750a592d8d10f1",
       "index": 0,
       "capacityShannons": "6218100000000"
     }
