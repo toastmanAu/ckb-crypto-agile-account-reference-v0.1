@@ -6,12 +6,13 @@ import {
   open,
   readFile,
   rename,
+  rmdir,
   unlink,
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
 
-import { PasskeyRecordSchema } from "../../src/shared/schemas.js";
+import { AccountManifestSchema, PasskeyRecordSchema } from "../../src/shared/schemas.js";
 
 const HASH32 = /^0x[0-9a-f]{64}$/;
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -51,6 +52,15 @@ export const RunDocumentSchema = z.object({
   accountCreationHash: z.string().regex(HASH32).optional(),
   spendHash: z.string().regex(HASH32).optional(),
   lastReconciledAt: z.string().datetime({ offset: true }),
+}).strict();
+
+export const ArchiveSummarySchema = z.object({
+  schemaVersion: z.literal(1),
+  archivedAt: z.string().datetime({ offset: true }),
+  accountId: z.string().regex(HASH32).nullable(),
+  accountCreationHash: z.string().regex(HASH32).nullable(),
+  credentialAvailable: z.boolean(),
+  reason: z.enum(["explicit_archive", "orphaned_account"]),
 }).strict();
 
 export type RecoveryDocument = z.infer<typeof RecoveryDocumentSchema>;
@@ -173,6 +183,19 @@ async function readPrivateJson<T>(path: string, schema: z.ZodType<T>): Promise<T
   return schema.parse(JSON.parse(await readFile(path, "utf8")));
 }
 
+async function loadOptionalAccountManifest(path: string) {
+  if (!(await exists(path))) return null;
+  await rejectSymlink(path);
+  return AccountManifestSchema.parse(JSON.parse(await readFile(path, "utf8")));
+}
+
+async function writeArchiveSummary(
+  path: string,
+  value: z.infer<typeof ArchiveSummarySchema>,
+) {
+  return writePrivateJson(path, value, ArchiveSummarySchema);
+}
+
 export async function saveRecovery(paths: RealTestnetPaths, value: RecoveryDocument): Promise<RecoveryDocument> {
   await ensurePrivateStateDirectories(paths);
   return writePrivateJson(paths.recoveryPath, value, RecoveryDocumentSchema);
@@ -205,6 +228,69 @@ export async function loadDiskState(paths: RealTestnetPaths): Promise<{
   }
   const manifestExists = await exists(paths.manifestPath);
   return { kind: classifyPresence({ manifestExists, recoveryExists: recovery !== null }), recovery };
+}
+
+export async function archiveRealTestnetState(paths: RealTestnetPaths, now: Date) {
+  const disk = await loadDiskState(paths);
+  const run = await loadRun(paths);
+  const manifest = await loadOptionalAccountManifest(paths.manifestPath);
+  if (disk.kind === "fresh" && run === null) throw new Error("No active testnet state to archive");
+
+  await mkdir(paths.rootDir, { recursive: true, mode: 0o700 });
+  await rejectSymlink(paths.rootDir);
+  await chmod(paths.rootDir, 0o700);
+  await mkdir(paths.archivesDir, { recursive: true, mode: 0o700 });
+  await rejectSymlink(paths.archivesDir);
+  await chmod(paths.archivesDir, 0o700);
+
+  const stamp = now.toISOString().replaceAll(":", "-");
+  const suffix = manifest?.account_id.slice(2, 10) ?? "pre-account";
+  const archiveDir = resolve(paths.archivesDir, `${stamp}-${suffix}`);
+  const staging = `${archiveDir}.staging`;
+  if (await exists(archiveDir) || await exists(staging)) {
+    throw new Error(`Archive already exists at ${archiveDir}`);
+  }
+
+  await mkdir(staging, { mode: 0o700 });
+  let movedActive = false;
+  let movedManifest = false;
+  try {
+    if (await exists(paths.activeDir)) {
+      await rename(paths.activeDir, resolve(staging, "active"));
+      movedActive = true;
+    }
+    if (manifest !== null) {
+      await rename(paths.manifestPath, resolve(staging, "testnet-account.json"));
+      movedManifest = true;
+    }
+    const summary = ArchiveSummarySchema.parse({
+      schemaVersion: 1,
+      archivedAt: now.toISOString(),
+      accountId: manifest?.account_id ?? run?.accountId ?? null,
+      accountCreationHash: manifest?.state_out_point.tx_hash ?? run?.accountCreationHash ?? null,
+      credentialAvailable: disk.recovery !== null,
+      reason: disk.kind === "orphaned_account" ? "orphaned_account" : "explicit_archive",
+    });
+    await writeArchiveSummary(resolve(staging, "summary.json"), summary);
+    await rename(staging, archiveDir);
+    return { archiveDir, summary };
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    if (movedManifest) {
+      await rename(resolve(staging, "testnet-account.json"), paths.manifestPath)
+        .catch((rollbackError) => rollbackErrors.push(rollbackError));
+    }
+    if (movedActive) {
+      await rename(resolve(staging, "active"), paths.activeDir)
+        .catch((rollbackError) => rollbackErrors.push(rollbackError));
+    }
+    await unlink(resolve(staging, "summary.json")).catch(() => undefined);
+    await rmdir(staging).catch((rollbackError) => rollbackErrors.push(rollbackError));
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError([error, ...rollbackErrors], "Archive failed and rollback was incomplete");
+    }
+    throw error;
+  }
 }
 
 export function credentialMatchesPasskey(

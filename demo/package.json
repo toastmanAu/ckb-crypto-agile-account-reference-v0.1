@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:browser": "playwright test test/browser/demo.spec.ts",
     "test:testnet": "CKB_PASSKEY_REAL_TESTNET_SPEC=1 playwright test test/browser/real-testnet.spec.ts",
+    "testnet:archive": "tsx test/support/archive-real-testnet.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "build": "vite build",
     "check:bundle": "node scripts/check-client-bundle.mjs",
