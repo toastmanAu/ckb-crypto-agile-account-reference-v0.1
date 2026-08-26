@@ -13,6 +13,7 @@ import {
   decideNextAction,
   loadDiskState,
   loadRecovery,
+  mergeRun,
   recoverySummary,
   saveRecovery,
   saveRun,
@@ -207,6 +208,53 @@ describe("real-testnet recovery state", () => {
     }).stage).toBe("account_committed");
   });
 
+  it("requires public hashes before advancing run stages", () => {
+    expect(() => RunDocumentSchema.parse({
+      schemaVersion: 1,
+      stage: "account_committed",
+      lastReconciledAt: "2026-08-26T00:00:00.000Z",
+    })).toThrow(/account identity and hash/i);
+    expect(() => RunDocumentSchema.parse({
+      schemaVersion: 1,
+      stage: "spend_submitted",
+      accountId: `0x${"33".repeat(32)}`,
+      accountCreationHash: `0x${"44".repeat(32)}`,
+      lastReconciledAt: "2026-08-26T00:00:00.000Z",
+    })).toThrow(/spend hash/i);
+    expect(() => RunDocumentSchema.parse({
+      schemaVersion: 1,
+      stage: "spend_committed",
+      accountId: `0x${"33".repeat(32)}`,
+      accountCreationHash: `0x${"44".repeat(32)}`,
+      lastReconciledAt: "2026-08-26T00:00:00.000Z",
+    })).toThrow(/spend hash/i);
+  });
+
+  it("never clears or changes a known transaction hash", () => {
+    const submitted = {
+      ...run,
+      stage: "spend_submitted",
+      spendHash: `0x${"99".repeat(32)}`,
+    } as const;
+
+    expect(mergeRun(submitted, {
+      ...submitted,
+      stage: "spend_committed",
+      lastReconciledAt: "2026-08-26T01:00:00.000Z",
+    })).toMatchObject({
+      accountCreationHash: run.accountCreationHash,
+      spendHash: submitted.spendHash,
+    });
+    expect(() => mergeRun(submitted, {
+      ...submitted,
+      accountCreationHash: `0x${"aa".repeat(32)}`,
+    })).toThrow(/account creation hash cannot change/i);
+    expect(() => mergeRun(submitted, {
+      ...submitted,
+      spendHash: `0x${"bb".repeat(32)}`,
+    })).toThrow(/spend hash cannot change/i);
+  });
+
   it("archives active profile, recovery, run metadata, and manifest without deletion", async () => {
     const paths = await tempPaths();
     await saveRecovery(paths, recovery);
@@ -323,5 +371,25 @@ describe("real-testnet recovery state", () => {
     [{ disk: "orphaned_account", visible: "blocked", runStage: undefined }, "block"],
   ] as const)("chooses one non-duplicating action for %o", (input, expected) => {
     expect(decideNextAction(input)).toBe(expected);
+  });
+
+  it.each([
+    [{ disk: "fresh", visible: "create_account", runStage: undefined }, "block"],
+    [{ disk: "fresh", visible: "create_passkey", runStage: "registered" }, "block"],
+    [{ disk: "registered", visible: "create_passkey", runStage: "registered" }, "block"],
+    [{ disk: "registered", visible: "create_account", runStage: "account_committed" }, "block"],
+    [{ disk: "recoverable_account", visible: "create_account", runStage: "account_committed" }, "block"],
+    [{ disk: "recoverable_account", visible: "authorize_spend", runStage: "spend_submitted" }, "reconcile_spend"],
+    [{ disk: "recoverable_account", visible: "submitted", runStage: "spend_submitted" }, "reconcile_spend"],
+  ] as const)("fails closed for conflicting or already-mutated states", (input, expected) => {
+    expect(decideNextAction(input)).toBe(expected);
+  });
+
+  it("reconciles a manifest that appears before its public run hash", () => {
+    expect(decideNextAction({
+      disk: "recoverable_account",
+      visible: "create_account",
+      runStage: "registered",
+    })).toBe("reconcile_account");
   });
 });

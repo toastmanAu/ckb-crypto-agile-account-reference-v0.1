@@ -52,7 +52,20 @@ export const RunDocumentSchema = z.object({
   accountCreationHash: z.string().regex(HASH32).optional(),
   spendHash: z.string().regex(HASH32).optional(),
   lastReconciledAt: z.string().datetime({ offset: true }),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.stage !== "registered" && (!value.accountId || !value.accountCreationHash)) {
+    context.addIssue({
+      code: "custom",
+      message: `${value.stage} requires account identity and hash`,
+    });
+  }
+  if (
+    (value.stage === "spend_submitted" || value.stage === "spend_committed")
+    && !value.spendHash
+  ) {
+    context.addIssue({ code: "custom", message: `${value.stage} requires a spend hash` });
+  }
+});
 
 export const ArchiveSummarySchema = z.object({
   schemaVersion: z.literal(1),
@@ -278,6 +291,16 @@ export async function loadRun(paths: RealTestnetPaths): Promise<RunDocument | nu
   return readPrivateJson(paths.runPath, RunDocumentSchema);
 }
 
+export function mergeRun(current: RunDocument | null, next: RunDocument): RunDocument {
+  if (current?.accountCreationHash && next.accountCreationHash !== current.accountCreationHash) {
+    throw new Error("Account creation hash cannot change");
+  }
+  if (current?.spendHash && next.spendHash !== current.spendHash) {
+    throw new Error("Spend hash cannot change");
+  }
+  return RunDocumentSchema.parse({ ...current, ...next });
+}
+
 export async function loadDiskState(paths: RealTestnetPaths): Promise<{
   kind: DiskState;
   recovery: RecoveryDocument | null;
@@ -417,16 +440,17 @@ export function decideNextAction(input: {
   if (input.runStage === "spend_submitted") {
     return input.disk === "recoverable_account" ? "reconcile_spend" : "block";
   }
+  if (
+    input.disk === "recoverable_account"
+    && (input.runStage === undefined || input.runStage === "registered")
+  ) {
+    return "reconcile_account";
+  }
   if (input.visible === "blocked" || input.visible === "submitted" || input.visible === "committed") {
     return "block";
   }
   if (input.disk === "fresh" && input.visible === "create_passkey") return "register";
   if (input.disk === "registered" && input.visible === "create_account") return "bootstrap";
-  if (
-    input.disk === "recoverable_account" &&
-    input.visible === "authorize_spend" &&
-    (input.runStage === undefined || input.runStage === "registered")
-  ) return "reconcile_account";
   if (input.disk === "recoverable_account" && input.visible === "authorize_spend") return "spend";
   return "block";
 }
