@@ -17,8 +17,9 @@
  *   npm run plan                        # phased P-256 selection, no network
  *   npm run plan -- --all               # all four artifacts
  *   CKB_PRIVKEY=0x... npm run deploy -- --broadcast
+ *   CKB_PRIVKEY=0x... npm run deploy -- --broadcast --only verifier_p256
  */
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,33 +27,16 @@ import { ccc } from "@ckb-ccc/core";
 
 import { SECP256K1_LOCK_ARGS_LENGTH } from "./artifacts.js";
 import {
-  ALL_ARTIFACTS,
-  PHASED_P256_ARTIFACTS,
-  PlannedCell,
-  buildDeploymentPlan,
-  formatCkb,
-} from "./plan.js";
+  buildDeploymentManifest,
+  parseDeploymentArgs,
+  type DeployedRecord,
+} from "./deployment.js";
+import { PlannedCell, buildDeploymentPlan, formatCkb } from "./plan.js";
 
 /** Pool minimum is 1000 shannons/KW; 1200 leaves a margin for size drift. */
 const FEE_RATE = 1200n;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-
-interface DeployedRecord {
-  name: string;
-  dataHash: string;
-  hashType: "data2";
-  txHash: string;
-  index: number;
-  capacityShannons: string;
-}
-
-function parseArgs(argv: string[]) {
-  const broadcast = argv.includes("--broadcast");
-  const all = argv.includes("--all");
-  const selection = all ? ALL_ARTIFACTS : PHASED_P256_ARTIFACTS;
-  return { broadcast, selection };
-}
 
 function printPlan(cells: PlannedCell[], total: bigint): void {
   console.log("Deployment plan (immutable code cells, hash_type data2)\n");
@@ -114,7 +98,7 @@ async function publishCell(
 }
 
 async function main(): Promise<void> {
-  const { broadcast, selection } = parseArgs(process.argv.slice(2));
+  const { broadcast, selection } = parseDeploymentArgs(process.argv.slice(2));
   const plan = buildDeploymentPlan(repoRoot, selection, SECP256K1_LOCK_ARGS_LENGTH);
   printPlan(plan.cells, plan.totalCapacityShannons);
 
@@ -150,22 +134,13 @@ async function main(): Promise<void> {
   }
 
   const outputPath = resolve(repoRoot, "deploy/testnet-deployments.json");
+  const existing: unknown = existsSync(outputPath)
+    ? JSON.parse(readFileSync(outputPath, "utf8"))
+    : undefined;
+  const manifest = buildDeploymentManifest(existing, records);
   writeFileSync(
     outputPath,
-    `${JSON.stringify(
-      {
-        schema_version: 1,
-        network: "testnet",
-        published: true,
-        hash_type: "data2",
-        note:
-          "Outpoints recorded by tools/deploy. Each cell's on-chain data hash was " +
-          "re-read and verified after commitment.",
-        artifacts: Object.fromEntries(records.map((record) => [record.name, record])),
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(manifest, null, 2)}\n`,
   );
   console.log(`\nWrote ${outputPath}`);
 }

@@ -30,6 +30,7 @@ The default is a dry run. It touches no network and needs no key:
 ```sh
 npm run plan              # phased: AccountLock + P-256 verifier
 npm run plan -- --all     # all four artifacts
+npm run plan -- --only verifier_p256  # one corrected/replacement artifact
 ```
 
 | Selection | Cells | Capacity |
@@ -44,11 +45,14 @@ Capacity is `8 + 33 + lock_args + data` bytes at 1 CKB per byte, plus fees.
 ```sh
 CKB_PRIVKEY=0x... npm run deploy -- --broadcast
 CKB_PRIVKEY=0x... npm run deploy -- --broadcast --all
+CKB_PRIVKEY=0x... npm run deploy -- --broadcast --only verifier_p256
 ```
 
 The key is read from the environment and never logged. One transaction is sent
 per artifact, so a partial failure still leaves unambiguous outpoints for
 whatever landed. Results are written to `deploy/testnet-deployments.json`.
+Selective publication retains validated records for previously published
+artifacts and replaces only the newly published record.
 
 ### What is checked, and when
 
