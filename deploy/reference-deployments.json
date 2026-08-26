@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-10",
+  "generated_at": "2026-08-26",
   "local": {
     "network": "local",
     "published": false,
@@ -12,7 +12,7 @@
       },
       "verifier_p256": {
         "path": "target/riscv64imac-unknown-none-elf/release/verifier-p256",
-        "data_hash": "0x376a3e1bfefc57d63cff2e5d022283800fb6b5f014b5edac4be573d58a7b124a"
+        "data_hash": "0xcd1ea1dcd6b07f4f4929945413135ee64dd81a95e11c9759c0bdf709c7e9868c"
       },
       "verifier_mldsa65": {
         "path": "target/riscv64imac-unknown-none-elf/release/verifier-mldsa-adapter",
