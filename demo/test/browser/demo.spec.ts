@@ -8,6 +8,7 @@ import {
   captureAndPersistRecovery,
   installVirtualAuthenticator,
 } from "./support/virtual-authenticator.js";
+import { visibleStage } from "./support/real-testnet-stage.js";
 import { createRealTestnetPaths } from "../support/real-testnet-state.js";
 
 const CONTROL_HEADERS = { "x-test-control": "ckb-passkey-demo" };
@@ -41,6 +42,33 @@ test.beforeEach(async ({ request }) => {
     headers: CONTROL_HEADERS,
   });
   expect(response.ok()).toBe(true);
+});
+
+test("waits for initial API reconciliation before detecting the actionable stage", async ({ page }) => {
+  let releaseInitialRequests!: () => void;
+  const initialRequestsReleased = new Promise<void>((resolve) => {
+    releaseInitialRequests = resolve;
+  });
+  await page.route("**/api/status", async (route) => {
+    await initialRequestsReleased;
+    await route.continue();
+  });
+  await page.route("**/api/account", async (route) => {
+    await initialRequestsReleased;
+    await route.continue();
+  });
+
+  await installVirtualAuthenticator(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Preparing your account" })).toBeVisible();
+
+  const releaseTimer = setTimeout(releaseInitialRequests, 500);
+  try {
+    await expect(visibleStage(page)).resolves.toBe("create_passkey");
+  } finally {
+    clearTimeout(releaseTimer);
+    releaseInitialRequests();
+  }
 });
 
 test("registers a real virtual passkey before offering account bootstrap", async ({ page }) => {

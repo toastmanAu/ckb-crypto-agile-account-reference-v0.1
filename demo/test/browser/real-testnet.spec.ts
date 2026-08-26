@@ -25,8 +25,8 @@ import {
   saveRun,
   type RealTestnetPaths,
   type RunDocument,
-  type VisibleStage,
 } from "../support/real-testnet-state.js";
+import { visibleStage } from "./support/real-testnet-stage.js";
 import {
   addRecoveryInitScript,
   captureAndPersistRecovery,
@@ -50,6 +50,8 @@ const ACCOUNT_STATE_BYTES = 177;
 const ACCOUNT_STATE_CAPACITY_CKB = 316;
 const ACCOUNT_ASSET_CAPACITY_CKB = 200;
 const BOOTSTRAP_FEE_RESERVE_CKB = 1;
+const BROWSER_ACTION_TIMEOUT_MS = 30_000;
+const FAILURE_DIAGNOSTIC_TIMEOUT_MS = 1_000;
 const demoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const repoRoot = resolve(demoRoot, "..");
 const paths = createRealTestnetPaths(repoRoot);
@@ -89,26 +91,6 @@ async function readAccountManifest(page: Page): Promise<AccountManifest> {
     return response.json();
   });
   return AccountManifestSchema.parse(value);
-}
-
-export async function visibleStage(page: Page): Promise<VisibleStage> {
-  if (
-    await page.getByRole("heading", { name: "Local setup is blocked" }).isVisible()
-    || await page.getByRole("alert").first().isVisible()
-  ) {
-    return "blocked";
-  }
-  const candidates: [VisibleStage, string][] = [
-    ["create_passkey", "Create your passkey"],
-    ["create_account", "Create your testnet account"],
-    ["authorize_spend", "Authorize your first spend"],
-    ["submitted", "Transaction submitted"],
-    ["committed", "Spend committed"],
-  ];
-  for (const [stage, heading] of candidates) {
-    if (await page.getByRole("heading", { name: heading }).isVisible()) return stage;
-  }
-  throw new Error("No recognized real-testnet stage is visible");
 }
 
 export async function reconcileKnownSpend(txHash: `0x${string}`): Promise<void> {
@@ -352,10 +334,12 @@ async function safeFailureSummary(
   const disk = await loadDiskState(statePaths).then((value) => value.kind).catch(() => "unreadable");
   const heading = page === null
     ? null
-    : await page.locator("main").getByRole("heading").first().textContent().catch(() => null);
+    : await page.locator("main").getByRole("heading").first()
+      .textContent({ timeout: FAILURE_DIAGNOSTIC_TIMEOUT_MS }).catch(() => null);
   const alert = page === null
     ? null
-    : await page.getByRole("alert").first().textContent().catch(() => null);
+    : await page.getByRole("alert").first()
+      .textContent({ timeout: FAILURE_DIAGNOSTIC_TIMEOUT_MS }).catch(() => null);
   const manifest = page === null ? null : await readAccountManifest(page).catch(() => null);
   const manifestPreserved = await pathExists(statePaths.manifestPath).catch(() => false);
   const recoveryPreserved = await pathExists(statePaths.recoveryPath).catch(() => false);
@@ -405,6 +389,8 @@ test("completes or resumes the passkey account and fixed spend on CKB testnet", 
       headless: true,
     });
     page = context.pages()[0] ?? await context.newPage();
+    page.setDefaultTimeout(BROWSER_ACTION_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(BROWSER_ACTION_TIMEOUT_MS);
 
     if (disk.recovery) await addRecoveryInitScript(context, disk.recovery);
     lifecycleStage = disk.recovery ? "restore virtual credential" : "install virtual authenticator";
@@ -412,6 +398,8 @@ test("completes or resumes the passkey account and fixed spend on CKB testnet", 
 
     lifecycleStage = "load application";
     await page.goto("/");
+    lifecycleStage = "settle application stage";
+    await visibleStage(page);
     lifecycleStage = "execute resumable flow";
     await executeResumableFlow(page, authenticator, paths, run);
   } catch {
