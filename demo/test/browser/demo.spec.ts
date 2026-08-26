@@ -9,6 +9,7 @@ import {
   installVirtualAuthenticator,
 } from "./support/virtual-authenticator.js";
 import { visibleStage } from "./support/real-testnet-stage.js";
+import { readAccountManifest } from "./support/real-testnet-account.js";
 import { createRealTestnetPaths } from "../support/real-testnet-state.js";
 
 const CONTROL_HEADERS = { "x-test-control": "ckb-passkey-demo" };
@@ -68,6 +69,34 @@ test("waits for initial API reconciliation before detecting the actionable stage
   } finally {
     clearTimeout(releaseTimer);
     releaseInitialRequests();
+  }
+});
+
+test("aborts a stalled diagnostic account manifest read within its local bound", async ({ page }) => {
+  let releaseAccountRequests!: () => void;
+  const accountRequestsReleased = new Promise<void>((resolve) => {
+    releaseAccountRequests = resolve;
+  });
+  await page.route("**/api/account", async (route) => {
+    await accountRequestsReleased;
+    await route.continue().catch(() => undefined);
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Preparing your account" })).toBeVisible();
+
+  const readOutcome = readAccountManifest(page, 100).then(
+    () => "resolved" as const,
+    () => "rejected" as const,
+  );
+  let guardTimer: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<"guard_expired">((resolve) => {
+    guardTimer = setTimeout(() => resolve("guard_expired"), 750);
+  });
+  try {
+    expect(await Promise.race([readOutcome, guard])).toBe("rejected");
+  } finally {
+    if (guardTimer !== undefined) clearTimeout(guardTimer);
+    releaseAccountRequests();
   }
 });
 

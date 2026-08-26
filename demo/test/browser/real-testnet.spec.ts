@@ -11,10 +11,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  AccountManifestSchema,
-  type AccountManifest,
-} from "../../src/shared/schemas.js";
-import {
   createRealTestnetPaths,
   decideNextAction,
   ensurePrivateStateDirectories,
@@ -26,6 +22,7 @@ import {
   type RealTestnetPaths,
   type RunDocument,
 } from "../support/real-testnet-state.js";
+import { readAccountManifest } from "./support/real-testnet-account.js";
 import { visibleStage } from "./support/real-testnet-stage.js";
 import {
   addRecoveryInitScript,
@@ -51,6 +48,7 @@ const ACCOUNT_STATE_CAPACITY_CKB = 316;
 const ACCOUNT_ASSET_CAPACITY_CKB = 200;
 const BOOTSTRAP_FEE_RESERVE_CKB = 1;
 const BROWSER_ACTION_TIMEOUT_MS = 30_000;
+const ACCOUNT_MANIFEST_TIMEOUT_MS = 30_000;
 const FAILURE_DIAGNOSTIC_TIMEOUT_MS = 1_000;
 const demoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const repoRoot = resolve(demoRoot, "..");
@@ -82,15 +80,6 @@ async function readDisplayedSpendHash(page: Page): Promise<`0x${string}`> {
     throw new Error("Submitted receipt did not expose a transaction hash");
   }
   return asTransactionHash(match[0].toLowerCase());
-}
-
-async function readAccountManifest(page: Page): Promise<AccountManifest> {
-  const value: unknown = await page.evaluate(async () => {
-    const response = await fetch("/api/account", { headers: { accept: "application/json" } });
-    if (!response.ok) throw new Error(`account manifest request failed with ${response.status}`);
-    return response.json();
-  });
-  return AccountManifestSchema.parse(value);
 }
 
 export async function reconcileKnownSpend(txHash: `0x${string}`): Promise<void> {
@@ -134,7 +123,7 @@ async function bootstrapAccount(
   await page.getByRole("button", { name: "Create testnet account" }).click();
   await expect(page.getByRole("heading", { name: "Authorize your first spend" }))
     .toBeVisible({ timeout: 10 * 60 * 1_000 });
-  const manifest = await readAccountManifest(page);
+  const manifest = await readAccountManifest(page, ACCOUNT_MANIFEST_TIMEOUT_MS);
   const next = mergeRun(run, {
     schemaVersion: 1,
     stage: "account_committed",
@@ -172,7 +161,7 @@ async function submitAndCommitSpend(
   if (disk.kind !== "recoverable_account") {
     throw new Error("Spend requires a recoverable active account");
   }
-  const manifest = await readAccountManifest(page);
+  const manifest = await readAccountManifest(page, ACCOUNT_MANIFEST_TIMEOUT_MS);
   if (
     manifest.account_id !== persistedRun.accountId
     || manifest.state_out_point.tx_hash !== persistedRun.accountCreationHash
@@ -222,7 +211,7 @@ async function submitAndCommitSpend(
 }
 
 async function explainBlockedAccount(page: Page): Promise<never> {
-  const manifest = await readAccountManifest(page);
+  const manifest = await readAccountManifest(page, ACCOUNT_MANIFEST_TIMEOUT_MS);
   const outPoint = {
     txHash: manifest.asset_out_point.tx_hash,
     index: manifest.asset_out_point.index,
@@ -292,7 +281,7 @@ async function executeResumableFlow(
       continue;
     }
     if (action === "reconcile_account") {
-      const manifest = await readAccountManifest(page);
+      const manifest = await readAccountManifest(page, ACCOUNT_MANIFEST_TIMEOUT_MS);
       run = await saveRun(statePaths, mergeRun(run, {
         schemaVersion: 1,
         stage: "account_committed",
@@ -340,7 +329,9 @@ async function safeFailureSummary(
     ? null
     : await page.getByRole("alert").first()
       .textContent({ timeout: FAILURE_DIAGNOSTIC_TIMEOUT_MS }).catch(() => null);
-  const manifest = page === null ? null : await readAccountManifest(page).catch(() => null);
+  const manifest = page === null
+    ? null
+    : await readAccountManifest(page, FAILURE_DIAGNOSTIC_TIMEOUT_MS).catch(() => null);
   const manifestPreserved = await pathExists(statePaths.manifestPath).catch(() => false);
   const recoveryPreserved = await pathExists(statePaths.recoveryPath).catch(() => false);
   const profilePreserved = await pathExists(statePaths.profileDir).catch(() => false);
