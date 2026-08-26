@@ -106,6 +106,19 @@ async function requirePrivateFile(path: string): Promise<void> {
   }
 }
 
+async function requirePrivateDirectory(path: string): Promise<void> {
+  await rejectSymlink(path);
+  const info = await lstat(path);
+  if (!info.isDirectory() || (info.mode & 0o077) !== 0) {
+    throw new Error(`State directory has unsafe permissions at ${path}`);
+  }
+}
+
+async function validatePrivateStateDirectoriesForRead(paths: RealTestnetPaths): Promise<void> {
+  if (await exists(paths.rootDir)) await requirePrivateDirectory(paths.rootDir);
+  if (await exists(paths.activeDir)) await requirePrivateDirectory(paths.activeDir);
+}
+
 export async function ensurePrivateStateDirectories(paths: RealTestnetPaths): Promise<void> {
   await mkdir(paths.rootDir, { recursive: true, mode: 0o700 });
   await rejectSymlink(paths.rootDir);
@@ -166,6 +179,7 @@ export async function saveRecovery(paths: RealTestnetPaths, value: RecoveryDocum
 }
 
 export async function loadRecovery(paths: RealTestnetPaths): Promise<RecoveryDocument | null> {
+  await validatePrivateStateDirectoriesForRead(paths);
   return readPrivateJson(paths.recoveryPath, RecoveryDocumentSchema);
 }
 
@@ -175,6 +189,7 @@ export async function saveRun(paths: RealTestnetPaths, value: RunDocument): Prom
 }
 
 export async function loadRun(paths: RealTestnetPaths): Promise<RunDocument | null> {
+  await validatePrivateStateDirectoriesForRead(paths);
   return readPrivateJson(paths.runPath, RunDocumentSchema);
 }
 

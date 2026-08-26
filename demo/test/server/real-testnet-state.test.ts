@@ -1,6 +1,6 @@
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -84,6 +84,42 @@ describe("real-testnet recovery state", () => {
     const paths = await tempPaths();
     await mkdir(paths.activeDir, { recursive: true, mode: 0o700 });
     await writeFile(paths.recoveryPath, "{}\n", { mode: 0o600 });
+
+    await expect(loadDiskState(paths)).rejects.toThrow(/recovery/i);
+  });
+
+  it.each(["rootDir", "activeDir"] as const)("rejects a symlinked %s before recovery lookup", async (directory) => {
+    const paths = await tempPaths();
+
+    if (directory === "rootDir") {
+      const target = join(dirname(paths.rootDir), "separate-state");
+      await mkdir(dirname(paths.rootDir), { recursive: true, mode: 0o700 });
+      await mkdir(target, { mode: 0o700 });
+      await symlink(target, paths.rootDir);
+    } else {
+      const target = join(paths.rootDir, "separate-state");
+      await mkdir(paths.rootDir, { recursive: true, mode: 0o700 });
+      await mkdir(target, { mode: 0o700 });
+      await symlink(target, paths.activeDir);
+    }
+
+    await expect(loadRecovery(paths)).rejects.toThrow(/symbolic link/i);
+  });
+
+  it.each(["rootDir", "activeDir"] as const)("rejects a group-accessible %s before recovery lookup", async (directory) => {
+    const paths = await tempPaths();
+    await mkdir(paths.activeDir, { recursive: true, mode: 0o700 });
+    await chmod(paths[directory], 0o750);
+
+    await expect(loadRecovery(paths)).rejects.toThrow(/permissions/i);
+  });
+
+  it("does not downgrade a symlinked empty active directory to fresh", async () => {
+    const paths = await tempPaths();
+    const target = join(paths.rootDir, "separate-state");
+    await mkdir(paths.rootDir, { recursive: true, mode: 0o700 });
+    await mkdir(target, { mode: 0o700 });
+    await symlink(target, paths.activeDir);
 
     await expect(loadDiskState(paths)).rejects.toThrow(/recovery/i);
   });
