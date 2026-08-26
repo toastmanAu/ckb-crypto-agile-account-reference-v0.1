@@ -1,4 +1,14 @@
-import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  unlink,
+} from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { z } from "zod";
 
 import { PasskeyRecordSchema } from "../../src/shared/schemas.js";
@@ -71,6 +81,115 @@ export function createRealTestnetPaths(repoRoot: string): RealTestnetPaths {
     archivesDir: resolve(rootDir, "archives"),
     manifestPath: resolve(repoRoot, "deploy/testnet-account.json"),
   };
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function rejectSymlink(path: string): Promise<void> {
+  const info = await lstat(path);
+  if (info.isSymbolicLink()) throw new Error(`Refusing symbolic link at ${path}`);
+}
+
+async function requirePrivateFile(path: string): Promise<void> {
+  await rejectSymlink(path);
+  const info = await lstat(path);
+  if (!info.isFile() || (info.mode & 0o077) !== 0) {
+    throw new Error(`Managed file has unsafe permissions at ${path}`);
+  }
+}
+
+export async function ensurePrivateStateDirectories(paths: RealTestnetPaths): Promise<void> {
+  await mkdir(paths.rootDir, { recursive: true, mode: 0o700 });
+  await rejectSymlink(paths.rootDir);
+  await chmod(paths.rootDir, 0o700);
+  await mkdir(paths.activeDir, { recursive: true, mode: 0o700 });
+  await rejectSymlink(paths.activeDir);
+  await chmod(paths.activeDir, 0o700);
+  await mkdir(paths.profileDir, { recursive: true, mode: 0o700 });
+  await rejectSymlink(paths.profileDir);
+  await chmod(paths.profileDir, 0o700);
+  await mkdir(paths.archivesDir, { recursive: true, mode: 0o700 });
+  await rejectSymlink(paths.archivesDir);
+  await chmod(paths.archivesDir, 0o700);
+}
+
+async function writePrivateJson<T>(
+  path: string,
+  value: T,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const verified = schema.parse(value);
+  if (await exists(path)) await requirePrivateFile(path);
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  let temporaryCreated = false;
+  try {
+    handle = await open(temporary, "wx", 0o600);
+    temporaryCreated = true;
+    await handle.writeFile(`${JSON.stringify(verified, null, 2)}\n`, "utf8");
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await rename(temporary, path);
+    await chmod(path, 0o600);
+    const directory = await open(dirname(path), "r");
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+    return schema.parse(JSON.parse(await readFile(path, "utf8")));
+  } catch (error) {
+    await handle?.close().catch(() => undefined);
+    if (temporaryCreated) await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function readPrivateJson<T>(path: string, schema: z.ZodType<T>): Promise<T | null> {
+  if (!(await exists(path))) return null;
+  await requirePrivateFile(path);
+  return schema.parse(JSON.parse(await readFile(path, "utf8")));
+}
+
+export async function saveRecovery(paths: RealTestnetPaths, value: RecoveryDocument): Promise<RecoveryDocument> {
+  await ensurePrivateStateDirectories(paths);
+  return writePrivateJson(paths.recoveryPath, value, RecoveryDocumentSchema);
+}
+
+export async function loadRecovery(paths: RealTestnetPaths): Promise<RecoveryDocument | null> {
+  return readPrivateJson(paths.recoveryPath, RecoveryDocumentSchema);
+}
+
+export async function saveRun(paths: RealTestnetPaths, value: RunDocument): Promise<RunDocument> {
+  await ensurePrivateStateDirectories(paths);
+  return writePrivateJson(paths.runPath, value, RunDocumentSchema);
+}
+
+export async function loadRun(paths: RealTestnetPaths): Promise<RunDocument | null> {
+  return readPrivateJson(paths.runPath, RunDocumentSchema);
+}
+
+export async function loadDiskState(paths: RealTestnetPaths): Promise<{
+  kind: DiskState;
+  recovery: RecoveryDocument | null;
+}> {
+  let recovery: RecoveryDocument | null;
+  try {
+    recovery = await loadRecovery(paths);
+  } catch (error) {
+    throw new Error("Unable to load recovery state", { cause: error });
+  }
+  const manifestExists = await exists(paths.manifestPath);
+  return { kind: classifyPresence({ manifestExists, recoveryExists: recovery !== null }), recovery };
 }
 
 export function credentialMatchesPasskey(

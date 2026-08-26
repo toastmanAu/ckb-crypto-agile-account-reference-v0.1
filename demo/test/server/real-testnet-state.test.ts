@@ -1,12 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   RecoveryDocumentSchema,
   RunDocumentSchema,
   classifyPresence,
   credentialMatchesPasskey,
+  createRealTestnetPaths,
   decideNextAction,
+  loadDiskState,
+  loadRecovery,
+  saveRecovery,
 } from "../support/real-testnet-state.js";
+import type { RecoveryDocument } from "../support/real-testnet-state.js";
+
+const roots: string[] = [];
+
+async function tempPaths() {
+  const root = await mkdtemp(join(tmpdir(), "ckb-passkey-state-"));
+  roots.push(root);
+  return createRealTestnetPaths(root);
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 const passkey = {
   schemaVersion: 1,
@@ -16,7 +36,7 @@ const passkey = {
   rpId: "localhost",
   origin: "http://localhost:5173",
   createdAt: "2026-08-26T00:00:00.000Z",
-};
+} satisfies RecoveryDocument["passkey"];
 
 const credential = {
   credentialId: "AQIDBA==",
@@ -25,7 +45,7 @@ const credential = {
   privateKey: "AQIDBA==", // synthetic schema fixture, not a usable PKCS#8 key
   userHandle: "BQYHCA==",
   signCount: 0,
-};
+} satisfies RecoveryDocument["credentials"][0];
 
 const recovery = {
   schemaVersion: 1,
@@ -35,9 +55,39 @@ const recovery = {
   passkey,
   credentials: [credential],
   createdAt: "2026-08-26T00:00:00.000Z",
-};
+} satisfies RecoveryDocument;
 
 describe("real-testnet recovery state", () => {
+  it("atomically round-trips recovery with private permissions", async () => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+
+    expect(await loadRecovery(paths)).toEqual(recovery);
+    expect((await lstat(paths.activeDir)).mode & 0o777).toBe(0o700);
+    expect((await lstat(paths.recoveryPath)).mode & 0o777).toBe(0o600);
+    expect(await readFile(paths.recoveryPath, "utf8")).not.toContain("CKB_PRIVKEY");
+  });
+
+  it("rejects group-readable and symlinked recovery files", async () => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+    await chmod(paths.recoveryPath, 0o640);
+    await expect(loadRecovery(paths)).rejects.toThrow(/permissions/i);
+
+    const second = await tempPaths();
+    await mkdir(second.activeDir, { recursive: true, mode: 0o700 });
+    await symlink(paths.recoveryPath, second.recoveryPath);
+    await expect(loadRecovery(second)).rejects.toThrow(/symbolic link/i);
+  });
+
+  it("never downgrades malformed recovery to a fresh state", async () => {
+    const paths = await tempPaths();
+    await mkdir(paths.activeDir, { recursive: true, mode: 0o700 });
+    await writeFile(paths.recoveryPath, "{}\n", { mode: 0o600 });
+
+    await expect(loadDiskState(paths)).rejects.toThrow(/recovery/i);
+  });
+
   it.each([
     [false, false, "fresh"],
     [false, true, "registered"],
