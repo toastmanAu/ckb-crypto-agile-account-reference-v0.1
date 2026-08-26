@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -109,6 +109,28 @@ describe("real-testnet recovery state", () => {
     expect((await lstat(paths.activeDir)).mode & 0o777).toBe(0o700);
     expect((await lstat(paths.recoveryPath)).mode & 0o777).toBe(0o600);
     expect(await readFile(paths.recoveryPath, "utf8")).not.toContain("CKB_PRIVKEY");
+  });
+
+  it("preserves the prior recovery when replacement fails before atomic rename", async () => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+    const before = await readFile(paths.recoveryPath, "utf8");
+    const entriesBefore = await readdir(paths.activeDir);
+    const replacement = {
+      ...recovery,
+      createdAt: "2026-08-26T01:00:00.000Z",
+    };
+
+    await expect(saveRecovery(paths, replacement, {
+      beforeRename: () => {
+        throw new Error("injected pre-rename failure");
+      },
+    })).rejects.toThrow("injected pre-rename failure");
+
+    const after = await readFile(paths.recoveryPath, "utf8");
+    expect(after).toBe(before);
+    expect(RecoveryDocumentSchema.parse(JSON.parse(after))).toEqual(recovery);
+    expect(await readdir(paths.activeDir)).toEqual(entriesBefore);
   });
 
   it("rejects group-readable and symlinked recovery files", async () => {

@@ -96,6 +96,10 @@ export interface ArchiveOptions {
   beforeFinalDirectoryReservation?: (archiveDir: string) => void | Promise<void>;
 }
 
+export interface RecoveryWriteOptions {
+  beforeRename?: () => void | Promise<void>;
+}
+
 export function recoverySummary(recovery: RecoveryDocument) {
   return {
     schemaVersion: recovery.schemaVersion,
@@ -175,6 +179,7 @@ async function writePrivateJson<T>(
   path: string,
   value: T,
   schema: z.ZodType<T>,
+  options: RecoveryWriteOptions = {},
 ): Promise<T> {
   const verified = schema.parse(value);
   if (await exists(path)) await requirePrivateFile(path);
@@ -188,6 +193,7 @@ async function writePrivateJson<T>(
     await handle.sync();
     await handle.close();
     handle = undefined;
+    await options.beforeRename?.();
     await rename(temporary, path);
     await chmod(path, 0o600);
     const directory = await open(dirname(path), "r");
@@ -271,9 +277,13 @@ function validateArchiveState(input: {
   }
 }
 
-export async function saveRecovery(paths: RealTestnetPaths, value: RecoveryDocument): Promise<RecoveryDocument> {
+export async function saveRecovery(
+  paths: RealTestnetPaths,
+  value: RecoveryDocument,
+  options?: RecoveryWriteOptions,
+): Promise<RecoveryDocument> {
   await ensurePrivateStateDirectories(paths);
-  return writePrivateJson(paths.recoveryPath, value, RecoveryDocumentSchema);
+  return writePrivateJson(paths.recoveryPath, value, RecoveryDocumentSchema, options);
 }
 
 export async function loadRecovery(paths: RealTestnetPaths): Promise<RecoveryDocument | null> {
