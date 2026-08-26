@@ -65,6 +65,28 @@ browser storage, screenshots, logs, issue reports, or a committed file. Never
 use a mainnet key. The key is intentionally required only by server modules;
 the production client bundle gate rejects server/key code.
 
+## Resumable funded browser test
+
+The real-testnet test stores its dedicated Chromium profile and a plaintext,
+testnet-only virtual WebAuthn private key below `demo/.local/real-testnet/active`.
+The directory is Git-ignored and owner-only. Anyone who copies `recovery.json` can
+authorize the remaining capacity in that testnet account.
+
+Never paste, commit, upload, screenshot, or attach files from `demo/.local/`.
+Do not remove the profile or recovery file while `deploy/testnet-account.json` is
+active. A manifest without its recovery credential is intentionally blocked.
+
+Re-run the same `npm run test:testnet` command after an interruption. The harness
+restores the same credential and reconciles known hashes instead of creating or
+submitting again.
+
+After stopping all demo/test processes, archive active local state with:
+
+    npm run testnet:archive
+
+Archive moves local state and the active public manifest into an ignored timestamped
+directory. It does not delete credentials or change on-chain cells.
+
 ## The three stages
 
 1. **Create your passkey.** Chromium performs a WebAuthn registration for
