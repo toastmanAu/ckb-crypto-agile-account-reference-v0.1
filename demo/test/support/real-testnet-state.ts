@@ -79,6 +79,10 @@ export interface RealTestnetPaths {
   manifestPath: string;
 }
 
+export interface ArchiveOptions {
+  beforeFinalDirectoryReservation?: (archiveDir: string) => void | Promise<void>;
+}
+
 export function createRealTestnetPaths(repoRoot: string): RealTestnetPaths {
   const rootDir = resolve(repoRoot, "demo/.local/real-testnet");
   const activeDir = resolve(rootDir, "active");
@@ -196,6 +200,54 @@ async function writeArchiveSummary(
   return writePrivateJson(path, value, ArchiveSummarySchema);
 }
 
+function inconsistentArchiveState(reason: string): never {
+  throw new Error(`Inconsistent archive state: ${reason}`);
+}
+
+function validateArchiveState(input: {
+  disk: Awaited<ReturnType<typeof loadDiskState>>;
+  run: RunDocument | null;
+  manifest: z.infer<typeof AccountManifestSchema> | null;
+}): void {
+  const actualDisk = classifyPresence({
+    manifestExists: input.manifest !== null,
+    recoveryExists: input.disk.recovery !== null,
+  });
+  if (actualDisk !== input.disk.kind) {
+    inconsistentArchiveState("manifest changed while loading");
+  }
+
+  if (input.manifest === null) {
+    if (
+      input.disk.recovery !== null
+      && input.run?.stage === "registered"
+      && input.run.accountId === undefined
+      && input.run.accountCreationHash === undefined
+      && input.run.spendHash === undefined
+    ) {
+      return;
+    }
+    if (input.disk.kind === "fresh" && input.run === null) {
+      throw new Error("No active testnet state to archive");
+    }
+    inconsistentArchiveState("account-stage run requires an account manifest");
+  }
+
+  if (input.disk.recovery === null && input.run === null) return;
+  if (input.disk.recovery === null || input.run === null) {
+    inconsistentArchiveState("account manifest, recovery, and run must be archived together");
+  }
+  if (input.run.stage === "registered") {
+    inconsistentArchiveState("registered run cannot have an account manifest");
+  }
+  if (input.run.accountId !== input.manifest.account_id) {
+    inconsistentArchiveState("run account ID does not match account manifest");
+  }
+  if (input.run.accountCreationHash !== input.manifest.state_out_point.tx_hash) {
+    inconsistentArchiveState("run account creation hash does not match account manifest");
+  }
+}
+
 export async function saveRecovery(paths: RealTestnetPaths, value: RecoveryDocument): Promise<RecoveryDocument> {
   await ensurePrivateStateDirectories(paths);
   return writePrivateJson(paths.recoveryPath, value, RecoveryDocumentSchema);
@@ -230,11 +282,15 @@ export async function loadDiskState(paths: RealTestnetPaths): Promise<{
   return { kind: classifyPresence({ manifestExists, recoveryExists: recovery !== null }), recovery };
 }
 
-export async function archiveRealTestnetState(paths: RealTestnetPaths, now: Date) {
+export async function archiveRealTestnetState(
+  paths: RealTestnetPaths,
+  now: Date,
+  options: ArchiveOptions = {},
+) {
   const disk = await loadDiskState(paths);
   const run = await loadRun(paths);
   const manifest = await loadOptionalAccountManifest(paths.manifestPath);
-  if (disk.kind === "fresh" && run === null) throw new Error("No active testnet state to archive");
+  validateArchiveState({ disk, run, manifest });
 
   await mkdir(paths.rootDir, { recursive: true, mode: 0o700 });
   await rejectSymlink(paths.rootDir);
@@ -247,21 +303,23 @@ export async function archiveRealTestnetState(paths: RealTestnetPaths, now: Date
   const suffix = manifest?.account_id.slice(2, 10) ?? "pre-account";
   const archiveDir = resolve(paths.archivesDir, `${stamp}-${suffix}`);
   const staging = `${archiveDir}.staging`;
-  if (await exists(archiveDir) || await exists(staging)) {
+  if (await exists(staging)) {
     throw new Error(`Archive already exists at ${archiveDir}`);
   }
 
   await mkdir(staging, { mode: 0o700 });
-  let movedActive = false;
-  let movedManifest = false;
+  let activeLocation: "staging" | "archive" | null = null;
+  let manifestLocation: "staging" | "archive" | null = null;
+  let summaryLocation: "staging" | "archive" | null = null;
+  let reservedArchive = false;
   try {
     if (await exists(paths.activeDir)) {
       await rename(paths.activeDir, resolve(staging, "active"));
-      movedActive = true;
+      activeLocation = "staging";
     }
     if (manifest !== null) {
       await rename(paths.manifestPath, resolve(staging, "testnet-account.json"));
-      movedManifest = true;
+      manifestLocation = "staging";
     }
     const summary = ArchiveSummarySchema.parse({
       schemaVersion: 1,
@@ -272,20 +330,49 @@ export async function archiveRealTestnetState(paths: RealTestnetPaths, now: Date
       reason: disk.kind === "orphaned_account" ? "orphaned_account" : "explicit_archive",
     });
     await writeArchiveSummary(resolve(staging, "summary.json"), summary);
-    await rename(staging, archiveDir);
+    summaryLocation = "staging";
+    await options.beforeFinalDirectoryReservation?.(archiveDir);
+    try {
+      await mkdir(archiveDir, { mode: 0o700 });
+      reservedArchive = true;
+      await chmod(archiveDir, 0o700);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(`Archive already exists at ${archiveDir}`, { cause: error });
+      }
+      throw error;
+    }
+    if (activeLocation === "staging") {
+      await rename(resolve(staging, "active"), resolve(archiveDir, "active"));
+      activeLocation = "archive";
+    }
+    if (manifestLocation === "staging") {
+      await rename(resolve(staging, "testnet-account.json"), resolve(archiveDir, "testnet-account.json"));
+      manifestLocation = "archive";
+    }
+    await rename(resolve(staging, "summary.json"), resolve(archiveDir, "summary.json"));
+    summaryLocation = "archive";
+    await rmdir(staging);
     return { archiveDir, summary };
   } catch (error) {
     const rollbackErrors: unknown[] = [];
-    if (movedManifest) {
-      await rename(resolve(staging, "testnet-account.json"), paths.manifestPath)
+    if (manifestLocation !== null) {
+      const manifestSource = resolve(
+        manifestLocation === "archive" ? archiveDir : staging,
+        "testnet-account.json",
+      );
+      await rename(manifestSource, paths.manifestPath)
         .catch((rollbackError) => rollbackErrors.push(rollbackError));
     }
-    if (movedActive) {
-      await rename(resolve(staging, "active"), paths.activeDir)
+    if (activeLocation !== null) {
+      const activeSource = resolve(activeLocation === "archive" ? archiveDir : staging, "active");
+      await rename(activeSource, paths.activeDir)
         .catch((rollbackError) => rollbackErrors.push(rollbackError));
     }
-    await unlink(resolve(staging, "summary.json")).catch(() => undefined);
+    if (summaryLocation === "staging") await unlink(resolve(staging, "summary.json")).catch(() => undefined);
+    if (summaryLocation === "archive") await unlink(resolve(archiveDir, "summary.json")).catch(() => undefined);
     await rmdir(staging).catch((rollbackError) => rollbackErrors.push(rollbackError));
+    if (reservedArchive) await rmdir(archiveDir).catch((rollbackError) => rollbackErrors.push(rollbackError));
     if (rollbackErrors.length > 0) {
       throw new AggregateError([error, ...rollbackErrors], "Archive failed and rollback was incomplete");
     }

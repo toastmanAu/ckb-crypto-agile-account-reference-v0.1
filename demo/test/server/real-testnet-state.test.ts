@@ -217,6 +217,55 @@ describe("real-testnet recovery state", () => {
     expect(result.summary).toMatchObject({ credentialAvailable: false, reason: "orphaned_account" });
   });
 
+  it("archives a registered pre-account recovery state", async () => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+    await saveRun(paths, {
+      schemaVersion: 1,
+      stage: "registered",
+      lastReconciledAt: "2026-08-26T00:00:00.000Z",
+    });
+
+    const result = await archiveRealTestnetState(paths, new Date("2026-08-26T01:02:03.000Z"));
+
+    expect(result.summary).toMatchObject({ accountId: null, accountCreationHash: null });
+    expect(await pathExists(join(result.archiveDir, "active/recovery.json"))).toBe(true);
+  });
+
+  it.each([
+    ["mismatched account ID", { ...run, accountId: `0x${"99".repeat(32)}` }],
+    ["mismatched account creation hash", { ...run, accountCreationHash: `0x${"99".repeat(32)}` }],
+    ["registered run with an account manifest", {
+      schemaVersion: 1,
+      stage: "registered",
+      lastReconciledAt: "2026-08-26T00:00:00.000Z",
+    }],
+  ] as const)("refuses %s without moving active sources", async (_name, inconsistentRun) => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+    await saveRun(paths, inconsistentRun);
+    await writeFixtureManifest(paths.manifestPath);
+    await writeFile(join(paths.profileDir, "profile-marker"), "kept\n", { mode: 0o600 });
+
+    await expect(archiveRealTestnetState(paths, new Date("2026-08-26T01:02:03.000Z")))
+      .rejects.toThrow(/inconsistent archive state/i);
+    expect(await pathExists(paths.activeDir)).toBe(true);
+    expect(await pathExists(paths.manifestPath)).toBe(true);
+    expect(await pathExists(join(paths.profileDir, "profile-marker"))).toBe(true);
+  });
+
+  it("refuses an account-stage run without its manifest before moving active state", async () => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+    await saveRun(paths, run);
+    await writeFile(join(paths.profileDir, "profile-marker"), "kept\n", { mode: 0o600 });
+
+    await expect(archiveRealTestnetState(paths, new Date("2026-08-26T01:02:03.000Z")))
+      .rejects.toThrow(/inconsistent archive state/i);
+    expect(await pathExists(paths.activeDir)).toBe(true);
+    expect(await pathExists(join(paths.profileDir, "profile-marker"))).toBe(true);
+  });
+
   it("refuses an archive-name collision without moving sources", async () => {
     const paths = await tempPaths();
     await writeFixtureManifest(paths.manifestPath);
@@ -226,6 +275,28 @@ describe("real-testnet recovery state", () => {
     await expect(archiveRealTestnetState(paths, new Date("2026-08-26T01:02:03.000Z")))
       .rejects.toThrow(/already exists/i);
     expect(await pathExists(paths.manifestPath)).toBe(true);
+  });
+
+  it("does not clobber a final archive directory created after staging", async () => {
+    const paths = await tempPaths();
+    await saveRecovery(paths, recovery);
+    await saveRun(paths, run);
+    await writeFixtureManifest(paths.manifestPath);
+    await writeFile(join(paths.profileDir, "profile-marker"), "kept\n", { mode: 0o600 });
+
+    let collidingArchiveDir = "";
+    await expect(archiveRealTestnetState(paths, new Date("2026-08-26T01:02:03.000Z"), {
+      beforeFinalDirectoryReservation: async (archiveDir) => {
+        collidingArchiveDir = archiveDir;
+        await mkdir(archiveDir, { mode: 0o700 });
+        await writeFile(join(archiveDir, "collision-marker"), "keep\n", { mode: 0o600 });
+      },
+    })).rejects.toThrow(/already exists/i);
+
+    expect(await pathExists(join(collidingArchiveDir, "collision-marker"))).toBe(true);
+    expect(await pathExists(paths.activeDir)).toBe(true);
+    expect(await pathExists(paths.manifestPath)).toBe(true);
+    expect(await pathExists(join(paths.profileDir, "profile-marker"))).toBe(true);
   });
 
   it.each([
