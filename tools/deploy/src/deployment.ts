@@ -18,35 +18,49 @@ export interface DeploymentManifest {
   artifacts: Record<string, DeployedRecord>;
 }
 
-export function parseDeploymentArgs(_argv: string[]): {
+export function parseDeploymentArgs(argv: string[]): {
   broadcast: boolean;
   selection: string[];
 } {
-  const argv = [..._argv];
-  const broadcast = argv.includes("--broadcast");
-  const all = argv.includes("--all");
-  const onlyIndexes = argv.flatMap((argument, index) => argument === "--only" ? [index] : []);
-  if (onlyIndexes.length > 1) {
-    throw new Error("--only may be specified once");
+  let broadcast = false;
+  let all = false;
+  let only: string | undefined;
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    if (argument === "--broadcast") {
+      broadcast = true;
+      continue;
+    }
+    if (argument === "--all") {
+      all = true;
+      continue;
+    }
+    if (argument === "--only") {
+      if (only !== undefined) throw new Error("--only may be specified once");
+      const name = argv[index + 1];
+      if (name === undefined || name.startsWith("--")) {
+        throw new Error("--only requires an artifact name");
+      }
+      only = name;
+      index += 1;
+      continue;
+    }
+    throw new Error(`unknown argument '${argument}'`);
   }
-  if (all && onlyIndexes.length > 0) {
+
+  if (all && only !== undefined) {
     throw new Error("cannot combine --all with --only");
   }
-  if (onlyIndexes.length === 0) {
+  if (only === undefined) {
     return {
       broadcast,
       selection: all ? [...ALL_ARTIFACTS] : [...PHASED_P256_ARTIFACTS],
     };
   }
-
-  const name = argv[onlyIndexes[0]! + 1];
-  if (name === undefined || name.startsWith("--")) {
-    throw new Error("--only requires an artifact name");
+  if (!ALL_ARTIFACTS.includes(only)) {
+    throw new Error(`unknown artifact '${only}'`);
   }
-  if (!ALL_ARTIFACTS.includes(name)) {
-    throw new Error(`unknown artifact '${name}'`);
-  }
-  return { broadcast, selection: [name] };
+  return { broadcast, selection: [only] };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -106,4 +120,15 @@ export function buildDeploymentManifest(
       "re-read and verified after commitment.",
     artifacts,
   };
+}
+
+export async function publishDeployment<T>(
+  existing: unknown,
+  cells: readonly T[],
+  publish: (cell: T) => Promise<DeployedRecord>,
+): Promise<DeploymentManifest> {
+  const validated = buildDeploymentManifest(existing, []);
+  const records: DeployedRecord[] = [];
+  for (const cell of cells) records.push(await publish(cell));
+  return buildDeploymentManifest(validated, records);
 }

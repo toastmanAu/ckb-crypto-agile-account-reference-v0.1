@@ -29,6 +29,7 @@ import { SECP256K1_LOCK_ARGS_LENGTH } from "./artifacts.js";
 import {
   buildDeploymentManifest,
   parseDeploymentArgs,
+  publishDeployment,
   type DeployedRecord,
 } from "./deployment.js";
 import { PlannedCell, buildDeploymentPlan, formatCkb } from "./plan.js";
@@ -107,6 +108,12 @@ async function main(): Promise<void> {
     return;
   }
 
+  const outputPath = resolve(repoRoot, "deploy/testnet-deployments.json");
+  const existing: unknown = existsSync(outputPath)
+    ? JSON.parse(readFileSync(outputPath, "utf8"))
+    : undefined;
+  const validatedExisting = buildDeploymentManifest(existing, []);
+
   const privateKey = process.env.CKB_PRIVKEY;
   if (!privateKey) {
     throw new Error("CKB_PRIVKEY is not set; refusing to broadcast");
@@ -127,17 +134,10 @@ async function main(): Promise<void> {
     );
   }
 
-  const records: DeployedRecord[] = [];
-  for (const cell of plan.cells) {
+  const manifest = await publishDeployment(validatedExisting, plan.cells, async (cell) => {
     console.log(`  publishing ${cell.name} (${formatCkb(cell.capacityShannons)})`);
-    records.push(await publishCell(signer, cell));
-  }
-
-  const outputPath = resolve(repoRoot, "deploy/testnet-deployments.json");
-  const existing: unknown = existsSync(outputPath)
-    ? JSON.parse(readFileSync(outputPath, "utf8"))
-    : undefined;
-  const manifest = buildDeploymentManifest(existing, records);
+    return publishCell(signer, cell);
+  });
   writeFileSync(
     outputPath,
     `${JSON.stringify(manifest, null, 2)}\n`,

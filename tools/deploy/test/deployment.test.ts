@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildDeploymentManifest,
   parseDeploymentArgs,
+  publishDeployment,
   type DeployedRecord,
 } from "../src/deployment.js";
 
@@ -42,6 +43,7 @@ describe("parseDeploymentArgs", () => {
     [["--only"], /requires an artifact/i],
     [["--all", "--only", "verifier_p256"], /cannot combine/i],
     [["--only", "unknown_verifier"], /unknown artifact/i],
+    [["--only=verifier_p256"], /unknown argument/i],
   ] as const)("rejects unsafe selection arguments %j", (argv, expected) => {
     expect(() => parseDeploymentArgs([...argv])).toThrow(expected);
   });
@@ -71,5 +73,18 @@ describe("buildDeploymentManifest", () => {
     expect(() => buildDeploymentManifest({ artifacts: { account_lock: accountLock } }, [
       correctedVerifier,
     ])).toThrow(/existing deployment manifest/i);
+  });
+});
+
+describe("publishDeployment", () => {
+  it("validates the existing manifest before invoking an irreversible publisher", async () => {
+    const publish = vi.fn(async () => correctedVerifier);
+
+    await expect(publishDeployment(
+      { artifacts: { account_lock: accountLock } },
+      ["verifier_p256"],
+      publish,
+    )).rejects.toThrow(/existing deployment manifest/i);
+    expect(publish).not.toHaveBeenCalled();
   });
 });

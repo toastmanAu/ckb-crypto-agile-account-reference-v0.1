@@ -12,7 +12,7 @@
       },
       "verifier_p256": {
         "path": "target/riscv64imac-unknown-none-elf/release/verifier-p256",
-        "data_hash": "0xcd1ea1dcd6b07f4f4929945413135ee64dd81a95e11c9759c0bdf709c7e9868c"
+        "data_hash": "0x1ec48320a3da560d7732d68391ec0046cd18b4990e7ee032e10f78242d4e1083"
       },
       "verifier_mldsa65": {
         "path": "target/riscv64imac-unknown-none-elf/release/verifier-mldsa-adapter",
