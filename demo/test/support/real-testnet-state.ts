@@ -83,6 +83,16 @@ export interface ArchiveOptions {
   beforeFinalDirectoryReservation?: (archiveDir: string) => void | Promise<void>;
 }
 
+export function recoverySummary(recovery: RecoveryDocument) {
+  return {
+    schemaVersion: recovery.schemaVersion,
+    network: recovery.network,
+    credentialId: recovery.passkey.credentialId,
+    keyId: recovery.passkey.keyId,
+    createdAt: recovery.createdAt,
+  };
+}
+
 export function createRealTestnetPaths(repoRoot: string): RealTestnetPaths {
   const rootDir = resolve(repoRoot, "demo/.local/real-testnet");
   const activeDir = resolve(rootDir, "active");

@@ -13,6 +13,7 @@ import {
   decideNextAction,
   loadDiskState,
   loadRecovery,
+  recoverySummary,
   saveRecovery,
   saveRun,
 } from "../support/real-testnet-state.js";
@@ -180,6 +181,20 @@ describe("real-testnet recovery state", () => {
     expect(() => RecoveryDocumentSchema.parse({ ...recovery, origin: "https://example.com" }))
       .toThrow();
     expect(() => RecoveryDocumentSchema.parse({ ...recovery, credentials: [] })).toThrow();
+  });
+
+  it("preserves the CDP restore payload but redacts private material from summaries", () => {
+    const parsed = RecoveryDocumentSchema.parse(recovery);
+
+    expect(parsed.credentials[0]).toEqual(credential);
+    expect(recoverySummary(parsed)).toEqual({
+      schemaVersion: 1,
+      network: "testnet",
+      credentialId: passkey.credentialId,
+      keyId: passkey.keyId,
+      createdAt: recovery.createdAt,
+    });
+    expect(JSON.stringify(recoverySummary(parsed))).not.toContain(credential.privateKey);
   });
 
   it("accepts only public run stages and 32-byte transaction hashes", () => {

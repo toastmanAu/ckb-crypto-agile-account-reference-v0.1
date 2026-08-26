@@ -2,16 +2,15 @@ import {
   expect,
   test,
   type APIRequestContext,
-  type CDPSession,
-  type Page,
 } from "@playwright/test";
 
-const CONTROL_HEADERS = { "x-test-control": "ckb-passkey-demo" };
+import {
+  captureAndPersistRecovery,
+  installVirtualAuthenticator,
+} from "./support/virtual-authenticator.js";
+import { createRealTestnetPaths } from "../support/real-testnet-state.js";
 
-interface VirtualAuthenticator {
-  authenticatorId: string;
-  session: CDPSession;
-}
+const CONTROL_HEADERS = { "x-test-control": "ckb-passkey-demo" };
 
 async function setFixtureControl(
   request: APIRequestContext,
@@ -37,25 +36,6 @@ async function fixtureEvents(request: APIRequestContext): Promise<{
   return response.json();
 }
 
-async function installVirtualAuthenticator(
-  page: Page,
-  options: { userVerified?: boolean; automaticPresence?: boolean } = {},
-): Promise<VirtualAuthenticator> {
-  const session = await page.context().newCDPSession(page);
-  await session.send("WebAuthn.enable");
-  const { authenticatorId } = await session.send("WebAuthn.addVirtualAuthenticator", {
-    options: {
-      protocol: "ctap2",
-      transport: "internal",
-      hasResidentKey: true,
-      hasUserVerification: true,
-      isUserVerified: options.userVerified ?? true,
-      automaticPresenceSimulation: options.automaticPresence ?? true,
-    },
-  });
-  return { authenticatorId, session };
-}
-
 test.beforeEach(async ({ request }) => {
   const response = await request.post("http://127.0.0.1:8790/__test__/control/reset", {
     headers: CONTROL_HEADERS,
@@ -72,6 +52,29 @@ test("registers a real virtual passkey before offering account bootstrap", async
 
   await expect(page.getByRole("heading", { name: "Create your testnet account" })).toBeVisible();
   await expect(page.getByText(/passkey key ID/i)).toBeVisible();
+});
+
+test("backs up and restores the virtual passkey before a spend", async ({ page }, testInfo) => {
+  const paths = createRealTestnetPaths(testInfo.outputPath("repo-root"));
+  const first = await installVirtualAuthenticator(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create passkey" }).click();
+  await expect(page.getByRole("heading", { name: "Create your testnet account" })).toBeVisible();
+
+  const recovery = await captureAndPersistRecovery(
+    page,
+    first,
+    paths,
+    new Date("2026-08-26T00:00:00.000Z"),
+  );
+  await first.session.send("WebAuthn.removeVirtualAuthenticator", {
+    authenticatorId: first.authenticatorId,
+  });
+  await installVirtualAuthenticator(page, { recovery });
+
+  await page.getByRole("button", { name: "Create testnet account" }).click();
+  await page.getByRole("button", { name: "Authorize 100 CKB spend" }).click();
+  await expect(page.getByRole("heading", { name: "Spend committed" })).toBeVisible();
 });
 
 test("authorizes the fixed spend and preserves its submitted and committed receipt", async ({ page }) => {
