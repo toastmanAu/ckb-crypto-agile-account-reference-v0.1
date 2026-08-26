@@ -17,6 +17,7 @@
     "test/browser",
     "test/fixtures",
     "test/server",
+    "test/support",
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"
