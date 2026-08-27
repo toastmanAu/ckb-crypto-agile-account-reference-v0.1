@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Bootstrap configuration for a singleton AccountStateV1.",
+    "Replace verifier_code_hash with the data hash of the P-256 verifier you",
+    "actually deployed, and key_id with CKB_HASH(canonical P-256 public key).",
+    "aux is profile 0x01 || rp_id_hash[32] || origin_hash[32], where the hashes",
+    "are SHA-256 of the WebAuthn RP ID and origin respectively.",
+    "capabilities: 0x01 SPEND | 0x02 ROTATE | 0x04 RECOVERY | 0x08 SESSION_ISSUE",
+    "This file is an example and is not itself deployable."
+  ],
+  "flags": 1,
+  "sequence": 0,
+  "spend_threshold": 1,
+  "rotate_threshold": 1,
+  "recovery_threshold": 1,
+  "recovery_since": 0,
+  "authenticators": [
+    {
+      "slot": 0,
+      "algorithm_id": 1,
+      "capabilities": 7,
+      "weight": 1,
+      "verifier_hash_type": 0,
+      "verifier_abi": 1,
+      "verifier_code_hash": "0x1ec48320a3da560d7732d68391ec0046cd18b4990e7ee032e10f78242d4e1083",
+      "key_id": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "aux": "0x0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-007",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "aux_length",
+  "description": "aux_len exceeds bytes/limit",
+  "expected": "reject"
+}

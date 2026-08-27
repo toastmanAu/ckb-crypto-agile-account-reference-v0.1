@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "network": "testnet",
+  "published": true,
+  "hash_type": "data2",
+  "note": "Outpoints recorded by tools/deploy. Each cell's on-chain data hash was re-read and verified after commitment.",
+  "artifacts": {
+    "account_lock": {
+      "name": "account_lock",
+      "dataHash": "0xc546913fec9a02ebdf59c7e22e38bd5d9bb07bea81985c4cf8288040f0480abe",
+      "hashType": "data2",
+      "txHash": "0xc1015d791dcf388b15a686c0dd8e7eecdd59d517713b558ed4b0c5265b98062d",
+      "index": 0,
+      "capacityShannons": "3350900000000"
+    },
+    "verifier_p256": {
+      "name": "verifier_p256",
+      "dataHash": "0x1ec48320a3da560d7732d68391ec0046cd18b4990e7ee032e10f78242d4e1083",
+      "hashType": "data2",
+      "txHash": "0xc13285b3ed2494c6c1275e48255025d3ab024b18b26e0e92f0750a592d8d10f1",
+      "index": 0,
+      "capacityShannons": "6218100000000"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-008",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "proof_length",
+  "description": "proof_len exceeds bytes/limit",
+  "expected": "reject"
+}

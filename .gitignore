@@ -2,3 +2,9 @@
 *.swp
 *.swo
 .DS_Store
+node_modules/
+.worktrees/
+demo/dist/
+demo/.local/
+demo/test-results/
+demo/playwright-report/

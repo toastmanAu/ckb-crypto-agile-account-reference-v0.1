@@ -1,0 +1,23 @@
+{
+  "name": "ckb-account-deploy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Code-cell deployment tooling for the CKB crypto-agile account reference. Not part of the Rust workspace and not required by scripts/check.sh.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "plan": "tsx src/deploy.ts",
+    "deploy": "tsx src/deploy.ts",
+    "bootstrap": "tsx src/bootstrap.ts"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "1.18.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

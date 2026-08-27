@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-006",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "reserved1",
+  "description": "reserved1 nonzero",
+  "expected": "reject"
+}

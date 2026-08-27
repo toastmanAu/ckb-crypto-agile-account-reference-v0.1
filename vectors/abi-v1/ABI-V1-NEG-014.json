@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-014",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "digest",
+  "description": "proof valid for different authorization_digest",
+  "expected": "reject"
+}
