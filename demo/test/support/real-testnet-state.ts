@@ -262,7 +262,7 @@ function validateArchiveState(input: {
   }
 
   if (input.disk.recovery === null && input.run === null) return;
-  if (input.disk.recovery === null || input.run === null) {
+  if (input.run === null) {
     inconsistentArchiveState("account manifest, recovery, and run must be archived together");
   }
   if (input.run.stage === "registered") {

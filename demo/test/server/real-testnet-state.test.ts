@@ -302,6 +302,25 @@ describe("real-testnet recovery state", () => {
     expect(result.summary).toMatchObject({ credentialAvailable: false, reason: "orphaned_account" });
   });
 
+  it("archives an orphaned account with matching public run metadata", async () => {
+    const paths = await tempPaths();
+    await saveRun(paths, run);
+    await writeFixtureManifest(paths.manifestPath);
+
+    const result = await archiveRealTestnetState(paths, new Date("2026-08-26T01:02:03.000Z"));
+
+    expect(result.summary).toMatchObject({
+      accountId,
+      accountCreationHash: manifest.state_out_point.tx_hash,
+      credentialAvailable: false,
+      reason: "orphaned_account",
+    });
+    expect(await pathExists(paths.activeDir)).toBe(false);
+    expect(await pathExists(paths.manifestPath)).toBe(false);
+    expect(await pathExists(join(result.archiveDir, "active/run.json"))).toBe(true);
+    expect(await pathExists(join(result.archiveDir, "testnet-account.json"))).toBe(true);
+  });
+
   it("archives a registered pre-account recovery state", async () => {
     const paths = await tempPaths();
     await saveRecovery(paths, recovery);

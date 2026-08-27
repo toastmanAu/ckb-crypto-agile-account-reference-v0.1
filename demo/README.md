@@ -120,7 +120,7 @@ Before trusting a result:
 - compare the AccountLock code hash with
   `0xc546913fec9a02ebdf59c7e22e38bd5d9bb07bea81985c4cf8288040f0480abe`;
 - compare the P-256 verifier dep with
-  `0x376a3e1bfefc57d63cff2e5d022283800fb6b5f014b5edac4be573d58a7b124a`;
+  `0x1ec48320a3da560d7732d68391ec0046cd18b4990e7ee032e10f78242d4e1083`;
 - after spending, confirm the displayed transaction is committed and its
   change output remains a live cell under the same AccountLock.
 

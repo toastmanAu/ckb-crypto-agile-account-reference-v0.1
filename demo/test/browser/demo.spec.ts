@@ -5,12 +5,17 @@ import {
 } from "@playwright/test";
 
 import {
+  addRecoveryInitScript,
   captureAndPersistRecovery,
   installVirtualAuthenticator,
 } from "./support/virtual-authenticator.js";
 import { visibleStage } from "./support/real-testnet-stage.js";
 import { readAccountManifest } from "./support/real-testnet-account.js";
-import { createRealTestnetPaths } from "../support/real-testnet-state.js";
+import { PASSKEY_STORAGE_KEY } from "../../src/client/storage.js";
+import {
+  createRealTestnetPaths,
+  type RecoveryDocument,
+} from "../support/real-testnet-state.js";
 
 const CONTROL_HEADERS = { "x-test-control": "ckb-passkey-demo" };
 
@@ -109,6 +114,46 @@ test("registers a real virtual passkey before offering account bootstrap", async
 
   await expect(page.getByRole("heading", { name: "Create your testnet account" })).toBeVisible();
   await expect(page.getByText(/passkey key ID/i)).toBeVisible();
+});
+
+test("seeds recovery storage before the first navigation in a fresh context", async ({ browser }) => {
+  const passkey = {
+    schemaVersion: 1,
+    credentialId: "AQIDBA",
+    publicKey: `0x04${"11".repeat(64)}`,
+    keyId: `0x${"22".repeat(32)}`,
+    rpId: "localhost",
+    origin: "http://localhost:5173",
+    createdAt: "2026-08-26T00:00:00.000Z",
+  } as const;
+  const recovery = {
+    schemaVersion: 1,
+    network: "testnet",
+    origin: "http://localhost:5173",
+    rpId: "localhost",
+    passkey,
+    credentials: [{
+      credentialId: "AQIDBA==",
+      isResidentCredential: true,
+      rpId: "localhost",
+      privateKey: "AQIDBA==",
+      signCount: 0,
+    }],
+    createdAt: "2026-08-26T00:00:00.000Z",
+  } satisfies RecoveryDocument;
+  const context = await browser.newContext({ baseURL: "http://localhost:5173" });
+
+  try {
+    await addRecoveryInitScript(context, recovery);
+    const page = await context.newPage();
+    await page.goto("/");
+
+    expect(await page.evaluate((key) => localStorage.getItem(key), PASSKEY_STORAGE_KEY))
+      .toBe(JSON.stringify(passkey));
+    await expect(page.getByRole("heading", { name: "Create your testnet account" })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
 test("backs up and restores the virtual passkey before a spend", async ({ page }, testInfo) => {

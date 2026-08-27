@@ -272,7 +272,7 @@ can vary slightly. See [CYCLES.md](CYCLES.md) for measurement details.
 | Artifact | CKB data hash |
 |---|---|
 | AccountLock | `0xc546913fec9a02ebdf59c7e22e38bd5d9bb07bea81985c4cf8288040f0480abe` |
-| P-256 verifier | `0x376a3e1bfefc57d63cff2e5d022283800fb6b5f014b5edac4be573d58a7b124a` |
+| P-256 verifier | `0x1ec48320a3da560d7732d68391ec0046cd18b4990e7ee032e10f78242d4e1083` |
 | ML-DSA-65 verifier | `0xc4c5b585443a9543e70eb7228cc3a3cacd2ce3a46f4d57523c612c94d210d0b6` |
 | SLH-DSA verifier | `0xb0c29ae45ff35bd831d59b38d0417d030be43b7a8be6ec90036005636157cd92` |
 

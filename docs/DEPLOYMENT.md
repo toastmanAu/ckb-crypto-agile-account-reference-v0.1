@@ -1,9 +1,17 @@
 # Deployment guide
 
-No AccountLock or adapter artifact from this repository is currently claimed
-as deployed on testnet or mainnet. The references in
-`deploy/reference-deployments.json` are either local artifact identities or
-explicitly labeled upstream engineering references.
+The limited testnet demo deployment publishes the repository's AccountLock and
+WebAuthn ES256/P-256 verifier as immutable `data2` code cells. Their verified
+outpoints are:
+
+- AccountLock: `0xc1015d791dcf388b15a686c0dd8e7eecdd59d517713b558ed4b0c5265b98062d:0`
+- P-256 verifier: `0xc13285b3ed2494c6c1275e48255025d3ab024b18b26e0e92f0750a592d8d10f1:0`
+
+The exact hashes, capacities, and outpoints are recorded in
+`deploy/testnet-deployments.json`. No ML-DSA or SLH-DSA adapter from this
+repository is claimed as deployed on testnet or mainnet; their entries in
+`deploy/reference-deployments.json` are local identities or explicitly labeled
+upstream engineering references.
 
 ## 1. Build and validate
 
