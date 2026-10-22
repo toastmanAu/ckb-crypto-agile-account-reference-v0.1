@@ -8,3 +8,6 @@ demo/dist/
 demo/.local/
 demo/test-results/
 demo/playwright-report/
+
+# Active local testnet account manifest written by the demo at runtime
+deploy/testnet-account.json
