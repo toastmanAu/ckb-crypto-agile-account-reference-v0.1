@@ -96,3 +96,60 @@ fn authorization_digest_is_domain_and_state_bound() {
         authorization_digest(OP_SPEND, &[1; 32], 2, b"State", &[3; 32]).unwrap()
     );
 }
+
+#[test]
+fn p256_proof_encoder_matches_abi_v1_layout() {
+    let mut public_key = [0x11; 65];
+    public_key[0] = 0x04;
+    let proof = encode_p256_proof(&public_key, b"x", &[0x22; 37], b"{}", &[0x30, 0x00]).unwrap();
+
+    let expected_hex = format!(
+        "04{}01782500{}02007b7d02003000",
+        "11".repeat(64),
+        "22".repeat(37),
+    );
+    assert_eq!(hex::encode(proof), expected_hex);
+}
+
+#[test]
+fn p256_proof_encoder_rejects_fields_the_verifier_cannot_accept() {
+    let mut public_key = [0x11; 65];
+    public_key[0] = 0x04;
+    let valid = || {
+        encode_p256_proof(
+            &public_key,
+            b"http://localhost:5173",
+            &[0x22; 37],
+            br#"{"type":"webauthn.get"}"#,
+            &[0x30, 0x00],
+        )
+    };
+    assert!(valid().is_ok());
+
+    assert_eq!(
+        encode_p256_proof(&public_key[..64], b"x", &[0x22; 37], b"{}", &[1]),
+        Err(ProtocolError::InvalidProof),
+    );
+    let mut compressed = [0x11; 65];
+    compressed[0] = 0x02;
+    assert_eq!(
+        encode_p256_proof(&compressed, b"x", &[0x22; 37], b"{}", &[1]),
+        Err(ProtocolError::InvalidProof),
+    );
+    assert_eq!(
+        encode_p256_proof(&public_key, b"", &[0x22; 37], b"{}", &[1]),
+        Err(ProtocolError::InvalidProof),
+    );
+    assert_eq!(
+        encode_p256_proof(&public_key, b"x", &[0x22; 36], b"{}", &[1]),
+        Err(ProtocolError::InvalidProof),
+    );
+    assert_eq!(
+        encode_p256_proof(&public_key, b"x", &[0x22; 37], b"", &[1]),
+        Err(ProtocolError::InvalidProof),
+    );
+    assert_eq!(
+        encode_p256_proof(&public_key, b"x", &[0x22; 37], b"{}", &[]),
+        Err(ProtocolError::InvalidProof),
+    );
+}

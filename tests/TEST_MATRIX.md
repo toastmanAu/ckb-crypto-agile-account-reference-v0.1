@@ -32,3 +32,36 @@ output. Focused negative and parser-corpus tests cover the remaining rows.
 | T14 | Duplicate proof slot | fail |
 | T15 | Nonzero verifier exit contributes weight | fail |
 | T16 | Unknown ABI/algorithm/flags | fail |
+
+## Verifier ABI v1 cross-package conformance
+
+`crates/host/tests/abi_v1_conformance.rs` checks this implementation against the
+frozen `ckb-account-verifier-abi-v1` vector set, mirrored under
+`vectors/abi-v1/` (see its `PROVENANCE.md`). These rows guard the wire format
+against silent drift between the RFC package and this repository.
+
+| ID | Test | Expected |
+|---|---|---|
+| A00 | `encode_verifier_request` vs `ABI-V1-STRUCT-001.request_hex` | byte-identical |
+| A01 | Framing parse of `ABI-V1-STRUCT-001` + field recovery | accept, fields match |
+| A02 | Eleven framing mutations (NEG-001..010, NEG-016) | reject |
+| A03 | Every published negative vector is classified | fail on unclassified vector |
+
+Five published mutations are cross-checks the framing parser provably cannot
+own, and are deferred with a recorded reason in `DEFERRED_MUTATIONS` rather than
+asserted at the wrong layer:
+
+| Vector | Mutation | Owning layer |
+|---|---|---|
+| NEG-011 | `slot` | AccountLock request construction (copies `AuthenticatorEntryV1::slot`) |
+| NEG-012 | `algorithm` | AccountState cross-check; parser does not receive the entry |
+| NEG-013 | `key` | verifier cryptography — ABI exit 5 `KEY_ID_MISMATCH` |
+| NEG-014 | `digest` | verifier cryptography — ABI exit 1 `INVALID_PROOF` |
+| NEG-015 | `profile` | per-algorithm verifier dispatch — ABI exit 4 `UNSUPPORTED_PROFILE` |
+
+Note that `ABI-V1-STRUCT-001` carries a placeholder proof
+(`"example-passkey-proof"`), so its declared expectation is `accept_structure`,
+not `accept`. Asserting a verifier binary rejects NEG-013/014 would be vacuous,
+because the same verifier also rejects the unmutated base. Closing those rows
+requires a cryptographically real base vector, which is upstream work in the ABI
+package.

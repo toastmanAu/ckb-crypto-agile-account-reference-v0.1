@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-012",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "algorithm",
+  "description": "algorithm_id differs from AccountState entry",
+  "expected": "reject"
+}

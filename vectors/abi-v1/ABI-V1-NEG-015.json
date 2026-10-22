@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-015",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "profile",
+  "description": "unsupported verifier_profile",
+  "expected": "reject"
+}

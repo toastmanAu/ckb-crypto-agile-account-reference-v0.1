@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-004",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "header_len",
+  "description": "header_len != 96",
+  "expected": "reject"
+}

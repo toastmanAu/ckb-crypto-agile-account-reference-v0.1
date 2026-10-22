@@ -274,7 +274,8 @@ fn verify(request: &[u8]) -> Result<(), i8> {
     if ckb_hash(proof.public_key) != *request.key_id {
         return Err(exit::KEY_ID_MISMATCH);
     }
-    if ckb_hash(proof.origin) != request.aux[33..65] {
+    let origin_hash: [u8; 32] = Sha256::digest(proof.origin).into();
+    if origin_hash != request.aux[33..65] {
         return Err(exit::AUX_MISMATCH);
     }
     if proof.authenticator_data[..32] != request.aux[1..33]

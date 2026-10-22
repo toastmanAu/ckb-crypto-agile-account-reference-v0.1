@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-009",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "trailing",
+  "description": "extra bytes after expected total_len",
+  "expected": "reject"
+}

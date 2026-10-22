@@ -71,9 +71,10 @@ impl Kind {
         match self {
             Self::P256 => {
                 let rp_id_hash: [u8; 32] = Sha256::digest(b"account.example").into();
+                let origin_hash: [u8; 32] = Sha256::digest(ORIGIN).into();
                 let mut aux = vec![1];
                 aux.extend_from_slice(&rp_id_hash);
-                aux.extend_from_slice(&ckb_hash(ORIGIN));
+                aux.extend_from_slice(&origin_hash);
                 aux
             }
             Self::MlDsa65 => vec![1],

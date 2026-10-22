@@ -472,11 +472,12 @@ mod vm {
             .to_sec1_point(false)
             .as_bytes()
             .to_vec();
-        let origin = b"https://account.example";
-        let rp_id_hash: [u8; 32] = Sha256::digest(b"account.example").into();
+        let origin = b"http://localhost:5173";
+        let rp_id_hash: [u8; 32] = Sha256::digest(b"localhost").into();
+        let origin_hash: [u8; 32] = Sha256::digest(origin).into();
         let mut aux = vec![1];
         aux.extend_from_slice(&rp_id_hash);
-        aux.extend_from_slice(&ckb_hash(origin));
+        aux.extend_from_slice(&origin_hash);
         cryptographic_spend(
             "verifier-p256",
             ALG_P256_WEBAUTHN,
@@ -515,7 +516,7 @@ mod vm {
     }
 
     #[test]
-    fn webauthn_es256_signature_is_verified_inside_ckb_vm() {
+    fn webauthn_sha256_origin_binding_is_verified_inside_ckb_vm() {
         let (context, tx, args) = webauthn_spend_fixture();
         assert_eq!(tx.output(0).unwrap().lock().args().raw_data(), args);
         let cycles = context

@@ -1,0 +1,7 @@
+{
+  "id": "ABI-V1-NEG-013",
+  "base": "ABI-V1-STRUCT-001",
+  "mutation": "key",
+  "description": "public key hash != key_id",
+  "expected": "reject"
+}
