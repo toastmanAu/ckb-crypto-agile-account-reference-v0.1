@@ -88,7 +88,7 @@ platform, ELF sizes, CKB data hashes, test result, and deployment outpoints.
 ## Release-candidate archive
 
 ```sh
-scripts/package_release.sh v0.1.0-rc.2 /tmp/ckb-account-release
+scripts/package_release.sh v0.1.0-rc.3 /tmp/ckb-account-release
 ```
 
 The script refuses to overwrite existing output, normalizes archive member

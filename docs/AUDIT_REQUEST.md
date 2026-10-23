@@ -11,8 +11,11 @@ silently reduced during proposal negotiation.
 **Repository:**
 https://github.com/toastmanAu/ckb-crypto-agile-account-reference-v0.1
 
-**Audit target:** immutable tag `audit-v0.1.0-rc.2` and its associated source
-commit. Confirm the resolved commit in the proposal before work begins.
+**Audit target:** immutable tag `audit-v0.1.0-rc.3` and its associated source
+commit. Confirm the resolved commit in the proposal before work begins. rc.3
+supersedes `audit-v0.1.0-rc.2`: it adds ABI v1 conformance vectors, testnet
+deployment records, and a WebAuthn origin hash binding fix, with contract
+artifacts verified byte-identical to rc.2.
 
 **Stage:** feature-complete, pre-testnet, unaudited reference implementation
 
